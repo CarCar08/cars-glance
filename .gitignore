@@ -1,0 +1,16 @@
+bin/
+obj/
+out/
+*.user
+*.suo
+.vs/
+TestResults/
+*.binlog
+
+# Release builds and their sandboxes
+artifacts*/
+previous/
+
+# Preview renders and probe output (they can show personal data)
+*.preview.png
+*-probe.txt

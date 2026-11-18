@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Everything that doesn't need Windows: settings, view models, the smart rules, time maths and the
+       parsers for weather, calendars, Todoist and the media snapshot. A future macOS/iOS port reuses this. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Glance</RootNamespace>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="CarsGlance" />
+    <InternalsVisibleTo Include="Glance.Tests" />
+  </ItemGroup>
+</Project>

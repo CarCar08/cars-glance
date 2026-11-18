@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C.A.R.S. Glance</title>
+<meta name="description" content="Your day at a glance, right on the desktop: a frosted-glass Windows widget for the time, weather, music, calendar, tasks and countdowns.">
+<link rel="icon" href="images/icon.png">
+<style>
+  :root { --red: #ff281c; --ink: #fff; --muted: rgba(255,255,255,.78); --faint: rgba(255,255,255,.55); --glass: rgba(255,255,255,.07); --edge: rgba(255,255,255,.16); }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Bahnschrift", "Segoe UI", system-ui, sans-serif; color: var(--ink);
+         background: radial-gradient(1200px 700px at 15% -10%, #8f0d14 0%, transparent 60%), linear-gradient(135deg, #3a0508, #0d0103 70%); min-height: 100vh; }
+  main { max-width: 1040px; margin: 0 auto; padding: 56px 16px 80px; }
+  header { display: flex; align-items: center; gap: 18px; }
+  header img { width: 64px; height: 64px; }
+  h1 { font-size: clamp(32px, 6vw, 52px); margin: 0; letter-spacing: .5px; }
+  .tag { color: var(--red); letter-spacing: 6px; font-weight: 600; font-size: 14px; margin: 0 0 6px; }
+  p.lead { font-size: clamp(18px, 2.4vw, 22px); color: var(--muted); max-width: 720px; line-height: 1.5; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; margin: 28px 0 40px; }
+  .btn { display: inline-block; padding: 14px 22px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 17px; }
+  .primary { background: var(--red); color: #fff; }
+  .ghost { background: var(--glass); border: 1px solid var(--edge); color: var(--ink); }
+  .shot { width: 100%; border-radius: 12px; display: block; margin: 0 0 18px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; margin-top: 18px; }
+  .card { background: var(--glass); border: 1px solid var(--edge); border-radius: 14px; padding: 16px; backdrop-filter: blur(18px); }
+  .card img { width: 100%; border-radius: 8px; }
+  .card h3 { margin: 12px 0 6px; font-size: 20px; }
+  .card p { margin: 0; color: var(--muted); line-height: 1.45; }
+  footer { margin-top: 48px; color: var(--faint); font-size: 14px; line-height: 1.6; }
+  footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="images/icon.png" alt="">
+    <div>
+      <p class="tag">C.A.R.S. GLANCE</p>
+      <h1>Your day at a glance.</h1>
+    </div>
+  </header>
+  <p class="lead">A frosted-glass panel in the middle of your Windows desktop: the time and weather, what's playing, your calendar and tasks, and the countdowns you care about. It sits under your windows, never takes focus, and goes still while you game.</p>
+  <div class="cta">
+    <a class="btn primary" href="https://github.com/CarCar08/cars-glance/releases/latest">Download for Windows</a>
+    <a class="btn ghost" href="https://github.com/CarCar08/cars-glance">Source on GitHub</a>
+  </div>
+  <img class="shot" src="images/clock.png" alt="The clock view with today's weather">
+  <div class="grid">
+    <div class="card"><img src="images/now-playing.png" alt="Now Playing"><h3>Now Playing</h3><p>Cover, title and progress for any player, with previous, play-pause and next.</p></div>
+    <div class="card"><img src="images/agenda.png" alt="Agenda"><h3>Agenda</h3><p>Today's events and your Todoist tasks, in the order that matters.</p></div>
+    <div class="card"><img src="images/next-up.png" alt="Next up"><h3>Next up</h3><p>Fifteen minutes before an event, the panel counts you in.</p></div>
+    <div class="card"><img src="images/countdown.png" alt="Countdown"><h3>Countdowns</h3><p>Pin the launch, trip or deadline you're waiting for.</p></div>
+  </div>
+  <footer>
+    Free and open source (MIT). No account, no telemetry. Installs for you only, no admin needed, and updates itself.<br>
+    Weather data by <a href="https://open-meteo.com">Open-Meteo.com</a>. Part of the C.A.R.S. family with <a href="https://github.com/CarCar08/cars-control">C.A.R.S. Control</a>.
+  </footer>
+</main>
+</body>
+</html>

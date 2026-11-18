@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The widget: CarsGlance.exe. WinForms only for its message loop; everything on screen is drawn with GDI+
+       into layered windows on the desktop layer. Released self-contained (no .NET install needed). -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationIcon>Assets\glance.ico</ApplicationIcon>
+    <AssemblyName>CarsGlance</AssemblyName>
+    <RootNamespace>Glance</RootNamespace>
+    <AssemblyTitle>C.A.R.S. Glance</AssemblyTitle>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Glance.Core\Glance.Core.csproj" />
+    <ProjectReference Include="..\Glance.Setup.Core\Glance.Setup.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="settings.default.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Assets\glance.ico" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Glance.Tests" />
+  </ItemGroup>
+</Project>

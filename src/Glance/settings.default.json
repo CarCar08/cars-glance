@@ -1,0 +1,46 @@
+{
+  // C.A.R.S. Glance settings. Save this file and the widget picks up the change within a second.
+  // (A Settings window replaces this file in version 1.0.)
+
+  // false = 12-hour clock with AM/PM, true = 24-hour clock
+  "use24HourClock": false,
+
+  // After you click or scroll to a view, the widget stays on it this many minutes, then goes back to choosing by itself.
+  "manualViewMinutes": 5,
+
+  // Weather under the clock (Open-Meteo, no account). Set your city's latitude and longitude (city level is plenty;
+  // only these two numbers are sent). Example for Kansas City: 39.10 and -94.58.
+  "weather": {
+    "enabled": true,
+    "place": "",
+    "latitude": null,
+    "longitude": null,
+    "fahrenheit": true
+  },
+
+  // Now Playing: the song playing in these apps (part of the app's Windows media ID, e.g. "Spotify", "Cider",
+  // "AppleMusic"). Empty = any player. It takes the screen while music plays, and for "keepAfterPauseMinutes" after a pause.
+  "nowPlaying": {
+    "enabled": true,
+    "apps": [],
+    "keepAfterPauseMinutes": 5
+  },
+
+  // Agenda (a click away) and Next up (takes the screen "nextUpMinutes" before a timed event and stays
+  // "nextUpHoldMinutes" after it starts).
+  // Calendar: Apple Calendar read through Spark Desktop, if you use Spark (it refreshes while Spark is open).
+  // Todoist: tasks due today and overdue. Connect it from the Start menu: "C.A.R.S. Glance – Connect Todoist".
+  "agenda": {
+    "enabled": true,
+    "calendar": false,
+    "todoist": true,
+    "nextUpMinutes": 15,
+    "nextUpHoldMinutes": 5
+  },
+
+  // Countdowns. "at" is local time (yyyy-MM-ddTHH:mm).
+  // "pinned": true keeps it on screen until it ends; otherwise it shows itself in its final 24 hours.
+  // "doneText" shows for "showDoneHours" after it ends, then the countdown drops out.
+  // Example: { "name": "Summer trip", "at": "2027-06-01T08:00", "pinned": false, "doneText": "BON VOYAGE", "showDoneHours": 12 }
+  "countdowns": []
+}
