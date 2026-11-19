@@ -204,6 +204,47 @@ sealed class TodoistService
         return useFilterEndpoint ? all : all.Where(t => t.Start.Date <= today).ToList();
     }
 
+    /// <summary>Asks for a fresh list on the next tick (after a change made here).</summary>
+    public void Soon() => nextUtc = DateTime.UtcNow.AddSeconds(2);
+
+    // Completes a task (a repeating task moves to its next date, as in Todoist). Returns an error line or null.
+    public async Task<string> CloseTask(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return "That task has no id";
+        string token = Credentials.Read();
+        if (token == null) return "Todoist isn't connected";
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, Api + "tasks/" + Uri.EscapeDataString(id) + "/close");
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            using HttpResponseMessage res = await Http.SendAsync(req);
+            if (res.IsSuccessStatusCode || res.StatusCode == HttpStatusCode.NotFound) { Soon(); return null; } // gone already counts as done
+            return "Todoist answered " + (int)res.StatusCode;
+        }
+        catch (Exception ex) { Log.Write("todoist close: " + ex.Message); return "Todoist unavailable"; }
+    }
+
+    // Quick add: Todoist reads dates, #projects, @labels and p1-p4 from the text itself.
+    public async Task<string> QuickAdd(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return "Type a task first";
+        string token = Credentials.Read();
+        if (token == null) return "Todoist isn't connected: connect it in Settings";
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, Api + "tasks/quick")
+            {
+                Content = new StringContent(JsonSerializer.Serialize(new { text }), Encoding.UTF8, "application/json"),
+            };
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            using HttpResponseMessage res = await Http.SendAsync(req);
+            if (res.IsSuccessStatusCode) { Soon(); return null; }
+            if (res.StatusCode == HttpStatusCode.Unauthorized || res.StatusCode == HttpStatusCode.Forbidden) return "Todoist refused the token: reconnect it in Settings";
+            return "Todoist answered " + (int)res.StatusCode + ": try again";
+        }
+        catch (Exception ex) { Log.Write("todoist add: " + ex.Message); return "Couldn't reach Todoist: check the connection"; }
+    }
+
     static async Task<Dictionary<string, string>> FetchProjects(string token)
     {
         var map = new Dictionary<string, string>();

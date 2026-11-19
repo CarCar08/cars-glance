@@ -12,7 +12,8 @@ static class Native
     public const int WM_MOUSEACTIVATE = 0x0021, WM_SETCURSOR = 0x0020, WM_MOUSEMOVE = 0x0200, WM_LBUTTONUP = 0x0202,
                      WM_MOUSEWHEEL = 0x020A, WM_MOUSELEAVE = 0x02A3, WM_DPICHANGED = 0x02E0;
     public const int MA_NOACTIVATE = 3;
-    public static readonly IntPtr IDC_HAND = new(32649);
+    public static readonly IntPtr IDC_HAND = new(32649), IDC_ARROW = new(32512);
+    public const int WM_RBUTTONUP = 0x0205;
     public const uint GW_HWNDNEXT = 2, GW_HWNDPREV = 3;
     public const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010,
                       SWP_SHOWWINDOW = 0x0040, SWP_NOOWNERZORDER = 0x0200;
@@ -45,6 +46,48 @@ static class Native
 
     delegate bool MonitorEnumProc(IntPtr monitor, IntPtr hdc, ref RECT rect, IntPtr data);
 
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct MONITORINFOEX
+    {
+        public int cbSize;
+        public RECT rcMonitor, rcWork;
+        public uint dwFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string szDevice;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct SYSTEM_POWER_STATUS { public byte ACLineStatus, BatteryFlag, BatteryLifePercent, SystemStatusFlag; public int BatteryLifeTime, BatteryFullLifeTime; }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool GetMonitorInfo(IntPtr monitor, ref MONITORINFOEX info);
+    [DllImport("user32.dll")] static extern bool SystemParametersInfo(uint action, uint param, out bool value, uint winIni);
+    [DllImport("kernel32.dll")] static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS status);
+
+    /// <summary>One display: its whole area, the part apps use (without the taskbar), and Windows' name for it.</summary>
+    public readonly record struct Display(Rectangle Bounds, Rectangle Work, string Name, bool Primary);
+
+    public static List<Display> Displays()
+    {
+        var list = new List<Display>();
+        MonitorEnumProc cb = (IntPtr m, IntPtr h, ref RECT r, IntPtr d) =>
+        {
+            var mi = new MONITORINFOEX { cbSize = Marshal.SizeOf<MONITORINFOEX>() };
+            Rectangle bounds = Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom);
+            if (GetMonitorInfo(m, ref mi))
+                list.Add(new Display(bounds, Rectangle.FromLTRB(mi.rcWork.Left, mi.rcWork.Top, mi.rcWork.Right, mi.rcWork.Bottom), mi.szDevice ?? "", (mi.dwFlags & 1) != 0));
+            else list.Add(new Display(bounds, bounds, "", false));
+            return true;
+        };
+        EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, cb, IntPtr.Zero);
+        GC.KeepAlive(cb);
+        return list;
+    }
+
+    /// <summary>Windows Settings > Accessibility > Visual effects > Animation effects.</summary>
+    public static bool WindowsAnimationsOn() => !SystemParametersInfo(0x1042 /* SPI_GETCLIENTAREAANIMATION */, 0, out bool on, 0) || on;
+
+    /// <summary>Battery saver (or Energy saver) is on.</summary>
+    public static bool BatterySaverOn() => GetSystemPowerStatus(out SYSTEM_POWER_STATUS p) && p.SystemStatusFlag == 1;
+
     [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr value);
     [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr hwnd);
     [DllImport("user32.dll")] static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr clip, MonitorEnumProc callback, IntPtr data);
@@ -61,6 +104,8 @@ static class Native
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd, int cmd);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hwnd);
     [DllImport("user32.dll")] public static extern bool UpdateLayeredWindowIndirect(IntPtr hwnd, ref UPDATELAYEREDWINDOWINFO info);
     [DllImport("user32.dll")] static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WinCompAttrData data);
     [DllImport("user32.dll")] static extern bool TrackMouseEvent(ref TRACKMOUSEEVENT e);

@@ -9,9 +9,10 @@ using System.Text;
 
 namespace Glance;
 
-enum InputKind { Next, Previous, Dot, Hover, Media, Update }
+enum InputKind { Next, Previous, Dot, Hover, Media, Update, Act, Menu, Volume }
 
-readonly record struct WidgetInput(InputKind Kind, int Index = -1);
+// Act: a click on a hit region (Hit says which, Index which row/button, Value a seek position, Item the row's id).
+readonly record struct WidgetInput(InputKind Kind, int Index = -1, HitKind Hit = HitKind.None, float Value = 0, string Item = null);
 
 sealed class WidgetContext : ApplicationContext
 {
@@ -38,15 +39,36 @@ sealed class WidgetContext : ApplicationContext
     int current;
     string manualId;
     DateTime manualUntilUtc;
+    bool held;                                  // "Stay on this view for an hour" (from the menu)
+    DateTime hiddenUntilUtc;                    // "Hide for an hour"
+    readonly EventWaitHandle show;              // set when Glance is started again while running: show it at once
+    readonly EventWaitHandle checkNow = new(false, EventResetMode.AutoReset, @"Local\CarsGlance.CheckUpdates"); // Settings > Updates > Check now
+    readonly AgendaUi agendaUi = new();
+    readonly System.Collections.Concurrent.ConcurrentQueue<Action> onUi = new(); // results from background work
+    string toast;                               // a short message in the top-left pill (volume, an error)
+    DateTime toastUntilUtc;
+    bool hintSeen = File.Exists(Paths.HintFlag);
+    ContextMenuStrip menu;
+    QuickAddForm quickAdd;
+    const string FirstRunHint = "SCROLL OR USE  ‹ ›  TO SWITCH   ·   RIGHT-CLICK FOR MORE";
     // which way the next view switch slides: set by a click/scroll, otherwise from the view order
     int pendingDir, slideDir = 1, lastIndex;
     string lastViewId;
 
-    public WidgetContext(EventWaitHandle quit, EventWaitHandle refresh)
+    public WidgetContext(EventWaitHandle quit, EventWaitHandle refresh, EventWaitHandle show = null)
     {
         this.quit = quit;
         this.refresh = refresh;
+        this.show = show;
+        bool firstRun = !File.Exists(Paths.SettingsFile);
         settings = Settings.Load() ?? Settings.Parse("{}");
+        if (firstRun && UpdateService.IsInstalledCopy)
+        {
+            // first start after installing: the Settings window opens on its Welcome page
+            var once = new System.Windows.Forms.Timer { Interval = 1500 };
+            once.Tick += (s, e) => { once.Stop(); once.Dispose(); Program.OpenSettings("welcome"); };
+            once.Start();
+        }
         try
         {
             watcher = new FileSystemWatcher(Paths.DataDir, "settings.json") { NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName };
@@ -89,8 +111,15 @@ sealed class WidgetContext : ApplicationContext
                 IntPtr host = DesktopHost();
                 bool haveFg = ForegroundRect(host, out Native.RECT fg);
                 bool gameMode = haveFg && overlays.Any(o => Contains(fg, o.Monitor));
+                bool calm = Calm();
                 foreach (Overlay o in overlays)
-                    o.Housekeep(host, ownPid, gameMode, haveFg && Contains(fg, o.Monitor));
+                    o.Housekeep(host, ownPid, gameMode, haveFg && Contains(fg, o.Monitor), calm);
+                while (onUi.TryDequeue(out Action a))
+                {
+                    try { a(); } catch (Exception ex) { Log.Write("ui: " + ex.Message); }
+                }
+                if (show != null && show.WaitOne(0)) { hiddenUntilUtc = DateTime.MinValue; foreach (Overlay o in overlays) o.MarkStale(); }
+                SendDueCompletions();
                 bool force = refresh != null && refresh.WaitOne(0);
                 if (woke || clockChanged)
                 {
@@ -109,9 +138,16 @@ sealed class WidgetContext : ApplicationContext
                 media.Tick(settings.NowPlaying, gameMode);
                 calendar.Tick(settings.Agenda, force);
                 todoist.Tick(settings.Agenda, force);
-                updates.Tick(gameMode);
+                bool checkRequested = checkNow.WaitOne(0);
+                if (settings.CheckForUpdates || checkRequested) updates.Tick(gameMode, checkRequested);
             }
             if (desktopHost == IntPtr.Zero) { SetInterval(250); return; } // Explorer not ready
+            if (DateTime.UtcNow < hiddenUntilUtc)
+            {
+                foreach (Overlay o in overlays) o.Hide();
+                SetInterval(250);
+                return;
+            }
 
             DateTime nowLocal = DateTime.Now;
             var agenda = new AgendaData
@@ -124,10 +160,11 @@ sealed class WidgetContext : ApplicationContext
                 TasksStatus = todoist.Status,
                 TodoistConnected = todoist.Connected,
             };
-            views = Views.Build(settings, nowLocal, weather.Latest, media.Current, agenda);
+            ForgetFinishedTasks();
+            views = Views.Build(settings, nowLocal, weather.Latest, media.Current, agenda, agendaUi);
             string pickId = null;
             if (manualId != null && DateTime.UtcNow < manualUntilUtc && views.Any(v => v.Id == manualId)) pickId = manualId;
-            else manualId = null;
+            else { manualId = null; held = false; }
             current = pickId != null ? views.FindIndex(v => v.Id == pickId) : Smart.Pick(views);
             ViewModel vm = views[current];
             if (vm.Id != lastViewId)
@@ -140,10 +177,13 @@ sealed class WidgetContext : ApplicationContext
 
             UpdateService.ReadyUpdate ready = updates.Ready;
             string updateText = ready == null ? null : "UPDATE READY  ·  " + ready.Version;
+            if (toast != null && DateTime.UtcNow >= toastUntilUtc) toast = null;
+            string hint = toast ?? (hintSeen ? null : FirstRunHint);
             bool busy = false;
             foreach (Overlay o in overlays)
             {
                 o.UpdateText = updateText;
+                o.HintText = hint;
                 o.Frame(vm, current, views.Count, slideDir, now, desktopHost, ownPid);
                 busy |= o.Animating;
             }
@@ -166,41 +206,289 @@ sealed class WidgetContext : ApplicationContext
 
     void OnInput(WidgetInput e)
     {
-        int n = views.Count;
-        if (e.Kind == InputKind.Update)
+        if (views.Count == 0) return;
+        switch (e.Kind)
         {
-            // The verified Setup waits for this process to exit, updates, and starts the new version.
-            if (updates.Apply()) { ExitThread(); return; }
-        }
-        else if (e.Kind == InputKind.Media)
-        {
-            // A button press keeps Now Playing up (as a manual choice), so pausing doesn't switch it away.
-            media.Command((MediaButton)e.Index);
-            ViewModel np = views.FirstOrDefault(v => v.Kind == ViewKind.NowPlaying);
-            if (np != null)
-            {
-                manualId = np.Id;
-                manualUntilUtc = DateTime.UtcNow.AddMinutes(settings.ManualViewMinutes);
-            }
-        }
-        else if (e.Kind != InputKind.Hover && n > 1)
-        {
-            int next = e.Kind switch
-            {
-                InputKind.Next => (current + 1) % n,
-                InputKind.Previous => (current - 1 + n) % n,
-                _ => Math.Clamp(e.Index, 0, n - 1),
-            };
-            pendingDir = e.Kind switch
-            {
-                InputKind.Next => 1,
-                InputKind.Previous => -1,
-                _ => next >= current ? 1 : -1,
-            };
-            manualId = views[next].Id;
-            manualUntilUtc = DateTime.UtcNow.AddMinutes(settings.ManualViewMinutes);
+            case InputKind.Hover: break;
+            case InputKind.Next: SwitchBy(1); break;
+            case InputKind.Previous: SwitchBy(-1); break;
+            case InputKind.Dot: SwitchTo(e.Index); break;
+            case InputKind.Update: if (updates.Apply()) { ExitThread(); return; } break;
+            case InputKind.Media: media.Command((MediaButton)e.Index); Hold(); break;
+            case InputKind.Volume: ChangeVolume(e.Value); break;
+            case InputKind.Menu: SeenHint(); ShowMenu(e.Item); return; // the menu runs its own loop: no Tick here
+            case InputKind.Act: Act(e); break;
         }
         Tick();
+    }
+
+    // What a click on each part of a view does. Every action keeps the view up (as a manual choice), so it
+    // doesn't switch away while you use it.
+    void Act(WidgetInput e)
+    {
+        ViewModel vm = views[current];
+        AgendaRow row = e.Index >= 0 && vm.Rows != null && e.Index < vm.Rows.Count ? vm.Rows[e.Index] : null;
+        switch (e.Hit)
+        {
+            case HitKind.Dot: SwitchTo(e.Index); return;
+            case HitKind.EdgePrev: SwitchBy(-1); return;
+            case HitKind.EdgeNext: SwitchBy(1); return;
+            case HitKind.Update: if (updates.Apply()) ExitThread(); return;
+            case HitKind.Hint: if (toast != null) toast = null; else SeenHint(); return;
+
+            case HitKind.Media: media.Command((MediaButton)e.Index); break;
+            case HitKind.Seek: media.Seek(e.Value); break;
+            case HitKind.Cover: media.OpenPlayer(); break;
+
+            case HitKind.Weather: OpenForecast(); break;
+            case HitKind.Date: ShowKind(ViewKind.Agenda); return;
+
+            case HitKind.TaskDone: if (e.Item != null) agendaUi.Completing[e.Item] = DateTime.UtcNow.AddSeconds(5); break;
+            case HitKind.Undo: if (e.Item != null) agendaUi.Completing.Remove(e.Item); break;
+            case HitKind.TaskOpen: if (e.Item != null) Open.Url("https://app.todoist.com/app/task/" + Uri.EscapeDataString(e.Item)); break;
+            case HitKind.EventOpen: if (row != null) agendaUi.CardId = row.ItemId; break;
+            case HitKind.More: agendaUi.Page++; break;
+            case HitKind.AddTask: ShowQuickAdd(); break;
+            case HitKind.CardClose: agendaUi.CardId = null; break;
+            case HitKind.CardDirections: Open.Url(vm.Card?.MapsUrl); break;
+            case HitKind.CardJoin: Open.Url(vm.Card?.JoinUrl); break;
+
+            case HitKind.NextDirections: Open.Url(vm.MapsUrl); break;
+            case HitKind.NextJoin: Open.Url(vm.JoinUrl); break;
+
+            case HitKind.Countdown: OpenSettings("countdowns"); break;
+
+            case HitKind.HomeLine:
+                string target = vm.Lines != null && e.Index >= 0 && e.Index < vm.Lines.Count ? vm.Lines[e.Index].Target : null;
+                if (target == "weather") { OpenForecast(); break; }
+                if (target == "agenda") { ShowKind(ViewKind.Agenda); return; }
+                if (target == "nowplaying") { ShowKind(ViewKind.NowPlaying); return; }
+                if (target != null && target.StartsWith("countdown:"))
+                {
+                    int ci = views.FindIndex(v => v.Id == target);
+                    if (ci >= 0) SwitchTo(ci); else OpenSettings("countdowns");
+                    return;
+                }
+                break;
+        }
+        Hold();
+    }
+
+    void SwitchBy(int dir)
+    {
+        int n = views.Count;
+        SeenHint();
+        if (n < 2) return;
+        int next = ((current + dir) % n + n) % n;
+        pendingDir = dir;
+        manualId = views[next].Id;
+        manualUntilUtc = DateTime.UtcNow.AddMinutes(settings.ManualViewMinutes);
+        held = false;
+    }
+
+    void SwitchTo(int index)
+    {
+        int n = views.Count;
+        SeenHint();
+        if (n < 2) return;
+        int next = Math.Clamp(index, 0, n - 1);
+        pendingDir = next >= current ? 1 : -1;
+        manualId = views[next].Id;
+        manualUntilUtc = DateTime.UtcNow.AddMinutes(settings.ManualViewMinutes);
+        held = false;
+    }
+
+    void ShowKind(ViewKind kind)
+    {
+        int i = views.FindIndex(v => v.Kind == kind);
+        if (i >= 0) SwitchTo(i);
+    }
+
+    // Keeps the current view on screen for the usual few minutes (an hour while "Stay on this view" is on).
+    void Hold()
+    {
+        manualId = views[current].Id;
+        DateTime until = DateTime.UtcNow.AddMinutes(settings.ManualViewMinutes);
+        if (!held || until > manualUntilUtc) manualUntilUtc = until;
+    }
+
+    void SeenHint()
+    {
+        if (hintSeen) return;
+        hintSeen = true;
+        try { File.WriteAllText(Paths.HintFlag, DateTime.Now.ToString("s", System.Globalization.CultureInfo.InvariantCulture)); } catch { }
+    }
+
+    void Toast(string text, double seconds = 2.5)
+    {
+        toast = text;
+        toastUntilUtc = DateTime.UtcNow.AddSeconds(seconds);
+    }
+
+    // Scrolling over the cover: the player's own volume (as in the Volume Mixer), 4% a notch.
+    void ChangeVolume(float notches)
+    {
+        string app = media.Current?.AppId;
+        float? v = AppVolume.Change(app, notches * 0.04f);
+        Toast(v is float nv ? "VOLUME  ·  " + (int)Math.Round(nv * 100) + "%" : "THIS PLAYER'S VOLUME CAN'T BE CHANGED HERE", 1.6);
+        Hold();
+    }
+
+    // Ticked tasks wait 5 seconds (Undo) and then go to Todoist. A failure brings the task back with a note.
+    readonly Dictionary<string, DateTime> doneAtUtc = new();
+
+    void SendDueCompletions()
+    {
+        if (agendaUi.Completing.Count == 0) return;
+        DateTime now = DateTime.UtcNow;
+        foreach (string id in agendaUi.Completing.Where(kv => kv.Value <= now).Select(kv => kv.Key).ToList())
+        {
+            agendaUi.Completing.Remove(id);
+            agendaUi.Done.Add(id);
+            doneAtUtc[id] = DateTime.MaxValue; // until Todoist confirms
+            Task.Run(async () =>
+            {
+                string error = await todoist.CloseTask(id);
+                onUi.Enqueue(() =>
+                {
+                    if (error == null) { doneAtUtc[id] = DateTime.UtcNow; return; }
+                    agendaUi.Done.Remove(id);
+                    doneAtUtc.Remove(id);
+                    Toast("COULDN'T COMPLETE IT: " + error.ToUpperInvariant(), 5);
+                });
+            });
+        }
+    }
+
+    // Once a fresh list from Todoist arrives after the close, the task is gone from it (or, if it repeats, has
+    // moved to its next date), so it no longer needs hiding.
+    void ForgetFinishedTasks()
+    {
+        if (doneAtUtc.Count == 0) return;
+        foreach (string id in doneAtUtc.Where(kv => kv.Value != DateTime.MaxValue && todoist.FetchedUtc > kv.Value.AddSeconds(3)).Select(kv => kv.Key).ToList())
+        {
+            doneAtUtc.Remove(id);
+            agendaUi.Done.Remove(id);
+        }
+    }
+
+    void ShowQuickAdd()
+    {
+        if (quickAdd != null && !quickAdd.IsDisposed) { quickAdd.Activate(); return; }
+        quickAdd = new QuickAddForm(async text =>
+        {
+            string error = await todoist.QuickAdd(text);
+            if (error == null) onUi.Enqueue(() => Toast("ADDED TO TODOIST"));
+            return error;
+        });
+        quickAdd.FormClosed += (s, e) => quickAdd = null;
+        quickAdd.Show();
+    }
+
+    // The forecast for the city in Settings, in the browser (an in-panel forecast arrives with Weather+).
+    void OpenForecast()
+    {
+        WeatherSetting w = settings.Weather;
+        if (!w.HasLocation) { OpenSettings("weather"); return; }
+        string la = w.Latitude.Value.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+        string lo = w.Longitude.Value.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+        bool us = w.Latitude is > 18 and < 72 && w.Longitude is > -180 and < -64;
+        Open.Url(us ? $"https://forecast.weather.gov/MapClick.php?lat={la}&lon={lo}" : $"https://weather.com/weather/today/l/{la},{lo}");
+    }
+
+    static void OpenSettings(string page = null) => Program.OpenSettings(page);
+
+    // ---- the right-click menu: what this view can do, then the panel itself
+
+    void ShowMenu(string itemId)
+    {
+        menu?.Dispose();
+        menu = new ContextMenuStrip { Renderer = new GlanceMenuRenderer(), Font = new Font("Segoe UI", 10.5f), ShowCheckMargin = true, ShowImageMargin = false };
+        ViewModel vm = views[current];
+        ToolStripItemCollection items = menu.Items;
+        void Item(string text, Action a, bool enabled = true, bool check = false)
+        {
+            var mi = new ToolStripMenuItem(text) { Enabled = enabled, Checked = check, Padding = new Padding(4, 3, 4, 3) };
+            mi.Click += (s, e) => { try { a(); } catch (Exception ex) { Log.Write("menu: " + ex.Message); } Tick(); };
+            items.Add(mi);
+        }
+
+        switch (vm.Kind)
+        {
+            case ViewKind.NowPlaying when vm.Media != null:
+                Item("Open " + media.PlayerName, media.OpenPlayer);
+                if (vm.Media.CanShuffle) Item("Shuffle", () => { media.ToggleShuffle(); Hold(); }, check: vm.Media.Shuffle);
+                if (vm.Media.CanRepeat)
+                    Item("Repeat: " + (vm.Media.Repeat switch { 1 => "this song", 2 => "the list", _ => "off" }), () => { media.CycleRepeat(); Hold(); });
+                break;
+            case ViewKind.Agenda:
+                AgendaItem task = itemId == null ? null : todoist.Items.FirstOrDefault(t => t.Id == itemId);
+                AgendaItem ev = itemId == null || task != null ? null : calendar.Items.FirstOrDefault(c => c.Id == itemId);
+                if (task != null)
+                {
+                    Item("Complete “" + Short(task.Title) + "”", () => { agendaUi.Completing[task.Id] = DateTime.UtcNow.AddSeconds(5); Hold(); });
+                    Item("Open in Todoist", () => Open.Url("https://app.todoist.com/app/task/" + Uri.EscapeDataString(task.Id)));
+                    items.Add(new ToolStripSeparator());
+                }
+                else if (ev != null)
+                {
+                    Item("Details", () => { agendaUi.CardId = ev.Id; Hold(); });
+                    string maps = Agenda.Directions(Agenda.Place(ev)), join = Agenda.MeetingLink(ev.Where, ev.Notes);
+                    if (join != null) Item("Join the meeting", () => Open.Url(join));
+                    if (maps != null) Item("Directions", () => Open.Url(maps));
+                    items.Add(new ToolStripSeparator());
+                }
+                if (vm.CanAdd) Item("Add a task…", ShowQuickAdd);
+                if (settings.Agenda.Todoist) Item("Open Todoist", () => Open.Url("https://app.todoist.com/app/today"));
+                Item("Refresh the agenda", () => { calendar.Tick(settings.Agenda, true); todoist.Tick(settings.Agenda, true); });
+                break;
+            case ViewKind.NextUp:
+                if (vm.JoinUrl != null) Item("Join the meeting", () => Open.Url(vm.JoinUrl));
+                if (vm.MapsUrl != null) Item("Directions", () => Open.Url(vm.MapsUrl));
+                Item("Dismiss", () => { agendaUi.Dismissed.Add(vm.Id); if (manualId == vm.Id) manualId = null; });
+                break;
+            case ViewKind.Countdown:
+                CountdownSetting c = settings.Countdowns.FirstOrDefault(x => "countdown:" + x.Name == vm.Id);
+                if (c != null) Item(c.Pinned ? "Unpin this countdown" : "Pin this countdown", () => SetPinned(c.Name, !c.Pinned));
+                Item("Edit countdowns…", () => OpenSettings("countdowns"));
+                break;
+            case ViewKind.Clock:
+            case ViewKind.Home:
+                if (settings.Weather.Enabled) Item("Forecast", OpenForecast);
+                break;
+        }
+        if (items.Count > 0 && items[^1] is not ToolStripSeparator) items.Add(new ToolStripSeparator());
+
+        if (held) Item("Resume switching by itself", () => { held = false; manualId = null; });
+        else Item("Stay on this view for an hour", () => { manualId = views[current].Id; manualUntilUtc = DateTime.UtcNow.AddHours(1); held = true; });
+        Item("Hide for an hour", () => { hiddenUntilUtc = DateTime.UtcNow.AddHours(1); Log.Write("hidden for an hour (start Glance again to show it)"); });
+        Item("Refresh", () =>
+        {
+            weather.Force();
+            calendar.Tick(settings.Agenda, true);
+            todoist.Tick(settings.Agenda, true);
+            foreach (Overlay o in overlays) o.MarkStale();
+        });
+        items.Add(new ToolStripSeparator());
+        Item("Settings…", () => OpenSettings());
+        UpdateService.ReadyUpdate ready = updates.Ready;
+        if (ready != null) Item("Install update " + ready.Version, () => { if (updates.Apply()) ExitThread(); });
+        else Item("Check for updates", () => { updates.Tick(false, true); Toast("CHECKING FOR UPDATES…"); });
+        Item("Quit C.A.R.S. Glance", () => { Program.SetQuitFlag(true); ExitThread(); });
+
+        menu.Show(Cursor.Position);
+        Native.SetForegroundWindow(menu.Handle); // so a click anywhere else closes it
+    }
+
+    static string Short(string s) => s.Length <= 34 ? s : s[..32].TrimEnd() + "…";
+
+    // Pin / unpin a countdown in settings.json (the Settings window shows the same switch).
+    void SetPinned(string name, bool pinned)
+    {
+        CountdownSetting c = settings.Countdowns.FirstOrDefault(x => x.Name == name);
+        if (c == null) return;
+        c.Pinned = pinned;
+        if (!Settings.Save(settings)) Toast("COULDN'T SAVE SETTINGS", 4);
     }
 
     void SetInterval(int ms)
@@ -221,17 +509,29 @@ sealed class WidgetContext : ApplicationContext
     static bool Contains(Native.RECT outer, Rectangle inner) =>
         outer.Left <= inner.Left && outer.Top <= inner.Top && outer.Right >= inner.Right && outer.Bottom >= inner.Bottom;
 
+    // One panel per display (except the ones turned off in Settings). Rebuilt when the displays or the look change.
     void SyncMonitors()
     {
-        List<Rectangle> monitors = Native.Monitors();
+        List<Native.Display> displays = Native.Displays();
+        AppearanceSetting look = settings.Appearance;
+        bool hc = settings.Accessibility.HighContrast;
         var sig = new StringBuilder();
-        foreach (Rectangle r in monitors) sig.Append(r.ToString()).Append('|');
+        foreach (Native.Display d in displays) sig.Append(d.Bounds).Append(d.Work).Append(d.Name).Append('|');
+        sig.Append(look.Accent).Append(look.Glass).Append(look.Size).Append(look.Position).Append(string.Join(",", look.HiddenDisplays)).Append(hc);
         if (sig.ToString() == monitorSignature) return;
         monitorSignature = sig.ToString();
         foreach (Overlay o in overlays) o.Dispose();
         overlays.Clear();
-        foreach (Rectangle r in monitors) overlays.Add(new Overlay(r, OnInput));
+        Style.Apply(look, hc);
+        List<Native.Display> shown = displays.Where(d => !look.HiddenDisplays.Contains(d.Name, StringComparer.OrdinalIgnoreCase)).ToList();
+        foreach (Native.Display d in shown) overlays.Add(new Overlay(d, look, OnInput));
     }
+
+    // Reduce motion (Settings, or Windows' "Animation effects" off) and battery saver: changes happen at once.
+    bool Calm() =>
+        settings.Accessibility.ReduceMotion == "on" ||
+        (settings.Accessibility.ReduceMotion == "system" && !Native.WindowsAnimationsOn()) ||
+        (settings.QuietOnBattery && Native.BatterySaverOn());
 
     // The top-level window that hosts the desktop icons view: Progman on Windows 11 24H2+,
     // or the WorkerW that holds SHELLDLL_DefView on older builds.
@@ -270,6 +570,7 @@ sealed class Overlay : IDisposable
     public readonly Rectangle Monitor;
     public bool Animating;
     public string UpdateText;      // "UPDATE READY · 0.9.1" while a verified update waits, else null
+    public string HintText;        // the top-left pill: a short message, or the first-run hint
 
     readonly LayeredWindow panel;
     readonly PanelArt art;
@@ -285,75 +586,109 @@ sealed class Overlay : IDisposable
     float morphFrom = 1, morphTo = 1;
     string shownKey, shownViewId, shownElapsed, shownLeft, shownControls, shownUpdate;
     int shownDots = -1, shownDot = -1, shownFill = -2, hoverButton = -1;
-    bool hover, stale = true, shown, covered, animate;
+    bool hover, stale = true, shown, covered, animate, hoverChanged;
+    string shownHint;
 
     /// <summary>Redraw everything on the next frame (after sleep or a clock change).</summary>
     public void MarkStale() => stale = true;
 
-    public Overlay(Rectangle monitor, Action<WidgetInput> input)
+    /// <summary>"Hide for an hour": the panel goes away until the next frame after that.</summary>
+    public void Hide()
     {
+        if (!shown) return;
+        panel.Hide();
+        shown = false;
+        stale = true;
+    }
+
+    public Overlay(Native.Display display, AppearanceSetting look, Action<WidgetInput> input)
+    {
+        Rectangle monitor = display.Bounds, work = display.Work.IsEmpty ? display.Bounds : display.Work;
         Monitor = monitor;
         this.input = input;
-        float s = (float)Math.Min(monitor.Height / 1440.0, monitor.Width / 2000.0);
+        float baseScale = (float)Math.Min(monitor.Height / 1440.0, monitor.Width / 2000.0);
+        float s = baseScale * look.Size / 100f;
+        s = Math.Min(s, (work.Width - 48) / 1120f); // never wider than the display
+        s = Math.Min(s, (work.Height - 48) / 360f);
         panel = new LayeredWindow(new Point(monitor.X + monitor.Width / 2, monitor.Y + monitor.Height / 2), "C.A.R.S. Glance", OnMouse);
         uint dpi = 96;
         try { dpi = Native.GetDpiForWindow(panel.Handle); } catch { }
         art = new PanelArt(s, (int)Math.Round(8 * dpi / 96.0)); // Windows 11 rounds the window with this radius
-        px = monitor.X + (monitor.Width - art.W) / 2;
-        py = monitor.Y + (monitor.Height - art.H) / 2;
+        // where it sits: centred, or along an edge / in a corner of the work area (clear of the taskbar)
+        int margin = (int)Math.Round(56 * baseScale);
+        string pos = look.Position ?? "center";
+        px = pos.EndsWith("left") ? work.Left + margin : pos.EndsWith("right") ? work.Right - margin - art.W : work.Left + (work.Width - art.W) / 2;
+        py = pos.StartsWith("top") ? work.Top + margin : pos.StartsWith("bottom") ? work.Bottom - margin - art.H : monitor.Y + (monitor.Height - art.H) / 2;
         surface = new Surface(art.W, art.H);
         Native.EnableBlurBehind(panel.Handle);
         Native.SetRoundedCorners(panel.Handle);
         panel.SetBounds(px, py, art.W, art.H);
     }
 
+    // 1.0: a click only does what's under the pointer (empty glass does nothing); the dots, the ‹ › edges and
+    // the scroll wheel switch views; right-click opens the menu; scrolling over a song's cover changes its volume.
     void OnMouse(int msg, IntPtr wParam, IntPtr lParam)
     {
         int x = (short)(lParam.ToInt64() & 0xFFFF), y = (short)((lParam.ToInt64() >> 16) & 0xFFFF);
-        bool media = f.View?.Kind == ViewKind.NowPlaying;
         switch (msg)
         {
             case Native.WM_MOUSEMOVE:
-                int over = media ? art.ButtonAt(x, y) : -1;
-                bool changed = over != hoverButton;
-                hoverButton = over;
+            {
+                Hit h = art.HitTest(f, x, y);
+                panel.HandCursor = h.Any;
+                bool changed = h.Kind != f.HoverHit.Kind || h.Index != f.HoverHit.Index;
+                f.HoverHit = h;
+                hoverButton = h.Kind == HitKind.Media ? h.Index : -1;
                 if (!hover) { hover = true; panel.TrackLeave(); changed = true; }
-                if (changed) input(new WidgetInput(InputKind.Hover));
+                if (changed) { hoverChanged = true; input(new WidgetInput(InputKind.Hover)); }
                 break;
+            }
             case Native.WM_MOUSELEAVE:
                 hover = false;
                 hoverButton = -1;
+                f.HoverHit = Hit.Nothing;
+                hoverChanged = true;
                 input(new WidgetInput(InputKind.Hover));
                 break;
             case Native.WM_LBUTTONUP:
-                int dot = art.DotAt(x, y, f.DotCount);
-                int button = media ? art.ButtonAt(x, y) : -1;
-                if (f.UpdateText != null && art.UpdateRect.Contains(x, y)) input(new WidgetInput(InputKind.Update));
-                else if (dot >= 0) input(new WidgetInput(InputKind.Dot, dot));
-                else if (button >= 0)
+            {
+                Hit h = art.HitTest(f, x, y);
+                if (!h.Any) break;
+                if (h.Kind == HitKind.Media)
                 {
-                    if (f.View.Media.Can((MediaButton)button))
-                    {
-                        pendingPress = button; // this screen shows the press
-                        input(new WidgetInput(InputKind.Media, button));
-                    }
+                    if (f.View?.Media == null || !f.View.Media.Can((MediaButton)h.Index)) break;
+                    pendingPress = h.Index; // this screen shows the press
                 }
-                else input(new WidgetInput(InputKind.Next));
+                float value = h.Kind == HitKind.Seek && f.View?.Media != null ? art.SeekFraction(f.View.Media, x) : 0;
+                input(new WidgetInput(InputKind.Act, h.Index, h.Kind, value, ItemAt(h)));
+                break;
+            }
+            case Native.WM_RBUTTONUP:
+                input(new WidgetInput(InputKind.Menu, -1, HitKind.None, 0, ItemAt(art.HitTest(f, x, y))));
                 break;
             case Native.WM_MOUSEWHEEL:
+            {
                 short delta = (short)((wParam.ToInt64() >> 16) & 0xFFFF);
-                input(new WidgetInput(delta > 0 ? InputKind.Previous : InputKind.Next));
+                // the wheel's lParam is in screen coordinates
+                Hit h = art.HitTest(f, x - px, y - py);
+                if (h.Kind == HitKind.Cover) input(new WidgetInput(InputKind.Volume, -1, HitKind.Cover, delta / 120f));
+                else input(new WidgetInput(delta > 0 ? InputKind.Previous : InputKind.Next));
                 break;
+            }
         }
     }
 
-    public void Housekeep(IntPtr host, uint ownPid, bool gameMode, bool coveredByFullscreen)
+    // Which agenda item a hit is about (the row's task or event id).
+    string ItemAt(Hit h) =>
+        h.Index >= 0 && f.View?.Rows != null && h.Index < f.View.Rows.Count ? f.View.Rows[h.Index].ItemId : null;
+
+    public void Housekeep(IntPtr host, uint ownPid, bool gameMode, bool coveredByFullscreen, bool calm = false)
     {
         bool wasCovered = covered;
         covered = coveredByFullscreen;
         if (wasCovered && !covered) stale = true;
         bool occluded = shown && !covered && panel.IsOccluded(ownPid);
-        animate = !gameMode && !covered && !occluded;
+        animate = !gameMode && !covered && !occluded && !calm;
         if (shown && host != IntPtr.Zero) panel.KeepOnDesktop(host, ownPid);
     }
 
@@ -465,6 +800,10 @@ sealed class Overlay : IDisposable
             f.UpdateText = UpdateText;
             dirty = Union(dirty, art.UpdateRect);
         }
+
+        // the top-left pill (a message or the first-run hint) and the hover layer (plates, arrows) redraw the panel
+        if (HintText != shownHint) { shownHint = HintText; f.HintText = HintText; dirty = art.Full; }
+        if (hoverChanged) { hoverChanged = false; dirty = art.Full; }
 
         // panel edge brightens under the pointer
         float hoverTarget = hover ? 1 : 0;
@@ -618,6 +957,12 @@ sealed class LayeredWindow : NativeWindow, IDisposable
 
     public void TrackLeave() => Native.TrackLeave(Handle);
 
+    public void Hide()
+    {
+        Native.ShowWindow(Handle, 0 /* SW_HIDE */);
+        shown = false;
+    }
+
     // Keep this window directly above the desktop host: under every app window, over the wallpaper.
     // When "Show desktop" raises the desktop above the apps, this follows it so it stays visible.
     public void KeepOnDesktop(IntPtr host, uint ownPid)
@@ -665,16 +1010,20 @@ sealed class LayeredWindow : NativeWindow, IDisposable
         return false;
     }
 
+    /// <summary>The hand appears only over something you can click; plain glass shows the normal arrow.</summary>
+    public bool HandCursor;
+
     protected override void WndProc(ref Message m)
     {
         switch (m.Msg)
         {
             case Native.WM_MOUSEACTIVATE: m.Result = (IntPtr)Native.MA_NOACTIVATE; return; // clicks never take focus
-            case Native.WM_SETCURSOR: Native.SetCursor(Native.LoadCursor(IntPtr.Zero, Native.IDC_HAND)); m.Result = (IntPtr)1; return;
+            case Native.WM_SETCURSOR: Native.SetCursor(Native.LoadCursor(IntPtr.Zero, HandCursor ? Native.IDC_HAND : Native.IDC_ARROW)); m.Result = (IntPtr)1; return;
             case Native.WM_DPICHANGED: m.Result = IntPtr.Zero; return; // size is set per monitor
             case Native.WM_MOUSEMOVE:
             case Native.WM_MOUSELEAVE:
             case Native.WM_LBUTTONUP:
+            case Native.WM_RBUTTONUP:
             case Native.WM_MOUSEWHEEL:
                 try { mouse(m.Msg, m.WParam, m.LParam); } catch (Exception ex) { Log.Write("input: " + ex.Message); }
                 m.Result = IntPtr.Zero;

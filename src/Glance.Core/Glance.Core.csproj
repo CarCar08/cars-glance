@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="CarsGlance" />
+    <InternalsVisibleTo Include="CarsGlance.Settings" />
     <InternalsVisibleTo Include="Glance.Tests" />
   </ItemGroup>
 </Project>

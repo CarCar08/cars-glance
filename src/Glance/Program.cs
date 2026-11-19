@@ -5,7 +5,8 @@
 //   CarsGlance.exe --autostart              the same, from sign-in (HKCU Run)
 //   CarsGlance.exe --ensure-running         the keep-running task: start Glance if it isn't running and you didn't quit it
 //   CarsGlance.exe --quit [--for-update]    stop the running copy (without --for-update it stays stopped until you start it)
-//   CarsGlance.exe --settings               open the settings file (a Settings window arrives in 1.0)
+//   CarsGlance.exe --settings [page]        open the Settings window (CarsGlance.Settings.exe), optionally at a page
+//   CarsGlance.exe --disconnect-todoist     forget the Todoist token (Settings > Calendar & tasks)
 //   CarsGlance.exe --connect-todoist        the window where you paste your own Todoist API token
 //   CarsGlance.exe --migrate-legacy <dir>   one-time: bring settings, calendar cache and the Todoist sign-in over from Desktop Widget
 //   CarsGlance.exe --selftest <file>        check the time, view, settings and layout logic
@@ -28,6 +29,7 @@ static class Program
     internal const string MutexName = "Local\\CarsGlance.Instance";
     internal const string QuitEventName = "Local\\CarsGlance.Quit";
     internal const string RefreshEventName = "Local\\CarsGlance.Refresh";
+    internal const string ShowEventName = "Local\\CarsGlance.Show";
     internal static string AppDir => Paths.AppDir;
 
     [STAThread]
@@ -42,7 +44,12 @@ static class Program
                 SignalQuit();
                 return 0;
             case "--ensure-running": return EnsureRunning();
-            case "--settings": return OpenSettings();
+            case "--settings": return OpenSettings(args.Length > 1 ? args[1] : null);
+            case "--disconnect-todoist":
+                Credentials.Delete();
+                Log.Write("Todoist disconnected (from Settings)");
+                ConnectTodoistForm.SignalWidget();
+                return 0;
             case "--selftest": return SelfTest.Run(args.Length > 1 ? args[1] : Path.Combine(Path.GetTempPath(), "CarsGlance-selftest.txt"));
             case "--preview": return Preview.Run(args);
             case "--connect-todoist": return ConnectTodoistForm.Run();
@@ -51,12 +58,18 @@ static class Program
         }
 
         using var mutex = new Mutex(true, MutexName, out bool createdNew);
-        if (!createdNew) return 0;
+        if (!createdNew)
+        {
+            // Started again while running (Start menu, sign-in): show it if it was hidden for an hour.
+            if (mode != "--autostart" && EventWaitHandle.TryOpenExisting(ShowEventName, out EventWaitHandle sh)) { sh.Set(); sh.Dispose(); }
+            return 0;
+        }
         SetQuitFlag(false);
         using var quit = new EventWaitHandle(false, EventResetMode.AutoReset, QuitEventName);
         using var refresh = new EventWaitHandle(false, EventResetMode.AutoReset, RefreshEventName);
+        using var show = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-        Application.Run(new WidgetContext(quit, refresh));
+        Application.Run(new WidgetContext(quit, refresh, show));
         return 0;
     }
 
@@ -69,7 +82,7 @@ static class Program
         }
     }
 
-    static void SetQuitFlag(bool on)
+    internal static void SetQuitFlag(bool on)
     {
         try
         {
@@ -91,10 +104,20 @@ static class Program
         return 0;
     }
 
-    static int OpenSettings()
+    // The Settings window (CarsGlance.Settings.exe next to this one); page: general, views, weather, agenda, music,
+    // countdowns, appearance, accessibility, updates, about or welcome.
+    internal static int OpenSettings(string page = null)
     {
         Settings.Load(); // creates settings.json from the defaults the first time
-        Process.Start(new ProcessStartInfo("notepad.exe", "\"" + Paths.SettingsFile + "\"") { UseShellExecute = false })?.Dispose();
+        string exe = Path.Combine(AppDir, "CarsGlance.Settings.exe");
+        try
+        {
+            if (File.Exists(exe))
+                Process.Start(new ProcessStartInfo(exe, page ?? "") { UseShellExecute = false })?.Dispose();
+            else // a development build without the Settings app: the file itself
+                Process.Start(new ProcessStartInfo("notepad.exe", "\"" + Paths.SettingsFile + "\"") { UseShellExecute = false })?.Dispose();
+        }
+        catch (Exception ex) { Log.Write("settings: " + ex.Message); }
         return 0;
     }
 }
@@ -341,7 +364,72 @@ static class SelfTest
         Check("GTA's final hour still beats next up", v[Smart.Pick(v)].Kind == ViewKind.Countdown);
         var many = Enumerable.Range(0, 6).Select(n => new AgendaItem { Source = AgendaSource.Todoist, Title = "Task " + n, Start = d17.Date }).ToList();
         ViewModel big = Views.AgendaView(s, new AgendaData { Tasks = many, TodoistConnected = true }, many, d17);
-        Check("a long day shows three lines and \"+ 3 more\"", big.Rows.Count == 4 && big.Rows[3].More && big.Rows[3].Title == "+ 3 more");
+        Check("a long day shows three lines and \"+ 3 more · 1 of 2\"", big.Rows.Count == 4 && big.Rows[3].More && big.Rows[3].Title.StartsWith("+ 3 more") && big.Rows[3].Title.EndsWith("1 of 2"));
+        var aui = new AgendaUi { Page = 1 };
+        ViewModel page2 = Views.AgendaView(s, new AgendaData { Tasks = many, TodoistConnected = true }, many, d17, aui);
+        Check("…\"+ N more\" pages on, then back to the top", page2.Rows.Count == 4 && page2.Rows[0].Title == "Task 3" && page2.Rows[3].Title.StartsWith("Back to the top"));
+        aui = new AgendaUi();
+        aui.Completing["Task 0"] = DateTime.UtcNow.AddSeconds(5);
+        many.ForEach(t => t.Id = t.Title);
+        ViewModel ticking = Views.AgendaView(s, new AgendaData { Tasks = many, TodoistConnected = true }, many, d17, aui);
+        Check("a ticked task stays in place, struck through, while Undo is offered", ticking.Rows[0].Completing && ticking.Rows[0].Title == "Task 0" && !ticking.Rows[1].Completing);
+        aui.Completing.Clear();
+        aui.Done.Add("Task 0");
+        ViewModel afterDone = Views.AgendaView(s, new AgendaData { Tasks = many, TodoistConnected = true }, many, d17, aui);
+        Check("once sent to Todoist it's hidden right away", afterDone.Rows[0].Title == "Task 1" && afterDone.Rows.Count(r => !r.More) == 3);
+        Check("quick add shows only with Todoist connected", afterDone.CanAdd && !Views.AgendaView(s, new AgendaData { Tasks = many }, many, d17).CanAdd);
+        var dismiss = new AgendaUi();
+        dismiss.Dismissed.Add(nuv?.Id ?? "");
+        Check("dismissing Next up hides it", Views.Build(s, before, null, null, agendaData, dismiss).All(x => x.Kind != ViewKind.NextUp));
+        Check("meeting links: Zoom in the notes wins over another link",
+            Agenda.MeetingLink("https://example.com/menu", "Join: https://us02web.zoom.us/j/123?pwd=x.") == "https://us02web.zoom.us/j/123?pwd=x");
+        Check("directions only for a real place, never for a link", Agenda.Directions(Agenda.Place(evs[0])).Contains("Main%20St%20Dental") &&
+            Agenda.Place(new AgendaItem { Where = "https://meet.google.com/abc" }) == null);
+        AgendaItem card = evs[0];
+        var cardUi = new AgendaUi { CardId = card.Id };
+        ViewModel withCard = Views.AgendaView(s, new AgendaData { Events = evs, CalendarUtc = DateTime.UtcNow }, evs, d17, cardUi);
+        Check("clicking an event opens its card with directions", withCard.Card != null && withCard.Card.Title == "Dentist" && withCard.Card.MapsUrl != null && withCard.Card.JoinUrl == null);
+        Check("per-app volume finds the player by its media ID", AppVolume.Key("CiderCollective.Cider_a6qxe093bx5xj!App") == "CiderCollective.Cider" && AppVolume.Key("Spotify.exe") == "Spotify");
+        // Home and the view order (1.0)
+        ViewModel home = Views.Build(s, before, new WeatherNow { Temp = 41, Code = 2, High = 52, Low = 33 }, song, agendaData)[0];
+        Check("Home leads, with weather, next event, tasks, music and the countdown",
+            home.Kind == ViewKind.Home && home.Values.Length == 2 && home.Lines.Select(l => l.Label).SequenceEqual(new[] { "WEATHER", "NEXT", "TASKS", "PLAYING", "COUNTDOWN" }) &&
+            home.Lines[0].Text == "41°  Partly cloudy  ·  52° / 33°" && home.Lines[1].Text.EndsWith("Dentist") && home.Lines[2].Alert && home.Lines[4].Target == "countdown:" + gta.Name);
+        s.FirstView = "clock";
+        Check("first view can be the big clock instead", Views.Build(s, before, null, null)[0].Kind == ViewKind.Clock);
+        s.FirstView = "home";
+        s.ViewOrder = new List<string> { "nowplaying", "agenda", "nextup", "countdowns", "clock" };
+        List<ViewKind> kinds = Views.Build(s, before, null, song, agendaData).Select(x => x.Kind).ToList();
+        Check("views follow the order chosen in Settings", kinds.SequenceEqual(new[] { ViewKind.Home, ViewKind.NowPlaying, ViewKind.Agenda, ViewKind.NextUp, ViewKind.Countdown }));
+        s.ViewOrder = new List<string>(Settings.DefaultOrder);
+        s.ShowClockView = true;
+        Check("with Home first, the big clock can stay as its own view", Views.Build(s, before, null, null).Any(x => x.Kind == ViewKind.Clock));
+        s.ShowClockView = false;
+        Settings odd = Settings.Parse("{ \"appearance\": { \"size\": 500, \"glass\": -3, \"position\": \"middle\", \"accent\": \"nope\" }, \"viewOrder\": [ \"agenda\", \"bogus\" ], \"firstView\": \"x\" }");
+        Check("odd settings are made safe (size, glass, position, accent, order, first view)",
+            odd.Appearance.Size == 160 && odd.Appearance.Glass == 0 && odd.Appearance.Position == "center" && odd.Appearance.AccentColor.R == 255 && odd.Appearance.AccentColor.G == 40 &&
+            odd.ViewOrder.SequenceEqual(new[] { "agenda", "nextup", "nowplaying", "countdowns", "clock" }) && odd.FirstView == "home");
+        Check("countdown distance reads simply", Views.Until(new DateTime(2026, 11, 20, 12, 0, 0), new DateTime(2026, 11, 18, 12, 0, 0)) == "2 days" &&
+            Views.Until(new DateTime(2026, 11, 18, 17, 20, 0), new DateTime(2026, 11, 18, 12, 0, 0)) == "5 h 20 min");
+        Settings round = Settings.Parse(s.ToJson());
+        Check("settings save and read back the same", round.Weather.Place == "Kansas City" && round.Countdowns.Count == 1 && round.Countdowns[0].Pinned == gta.Pinned &&
+            round.Agenda.Calendar && round.NowPlaying.Apps.SequenceEqual(new[] { "Cider" }) && round.Countdowns[0].Valid);
+        using (var hp = new PanelArt(1, 8))
+        {
+            var hf = new FrameState { View = ticking, DotCount = 3, DotIndex = 1 };
+            List<Hit> hits = hp.Hits(hf);
+            Check("agenda: a task's ring completes it, its title opens it, a ticked one offers Undo",
+                hits.Any(h => h.Kind == HitKind.Undo && h.Index == 0) && hits.Any(h => h.Kind == HitKind.TaskDone && h.Index == 1) &&
+                hits.Any(h => h.Kind == HitKind.TaskOpen && h.Index == 1) && hits.Any(h => h.Kind == HitKind.More) && hits.Any(h => h.Kind == HitKind.AddTask));
+            Check("dots and both edges switch views", hits.Count(h => h.Kind == HitKind.Dot) == 3 && hits.Any(h => h.Kind == HitKind.EdgePrev) && hits.Any(h => h.Kind == HitKind.EdgeNext));
+            hf.View = withCard;
+            hits = hp.Hits(hf);
+            Check("with a card open only its buttons act", hits.Any(h => h.Kind == HitKind.CardClose) && hits.Any(h => h.Kind == HitKind.CardDirections) &&
+                !hits.Any(h => h.Kind is HitKind.EventOpen or HitKind.TaskDone));
+            hf.View = Views.Clock(s, pm, new WeatherNow { Temp = 41, Code = 2, High = 52, Low = 33 });
+            Check("clock: the date and the weather act, the digits between them don't",
+                hp.Hits(hf).Any(h => h.Kind == HitKind.Date) && hp.Hits(hf).Any(h => h.Kind == HitKind.Weather) && !hp.HitTest(hf, hp.W / 2, hp.H / 2).Any);
+        }
         List<AgendaItem> timedOnly = evs.Where(i => !i.AllDay).ToList(); // an all-day event rightly stays "today" until midnight
         ViewModel empty = Views.AgendaView(s, new AgendaData { Events = timedOnly, CalendarUtc = DateTime.UtcNow, TodoistConnected = true }, timedOnly, new DateTime(2026, 11, 17, 23, 0, 0));
         Check("an empty evening says so and previews tomorrow", empty.Rows.Count == 0 && empty.Detail == "Nothing else today" && empty.Footer != null && empty.Footer.Contains("Haircut"));
@@ -527,8 +615,9 @@ static class Preview
                 agenda = new AgendaData { Events = new List<AgendaItem> { Ev("Haircut", 33, 0, 45, "") }, CalendarUtc = DateTime.UtcNow };
         }
 
+        if (view == "clock") settings.FirstView = "clock";
         NowPlayingInfo media = null;
-        if (view == "nowplaying")
+        if (view == "nowplaying" || Array.IndexOf(args, "--music") >= 0)
         {
             if (Array.IndexOf(args, "--live") >= 0)
             {
@@ -552,13 +641,17 @@ static class Preview
             if (Array.IndexOf(args, "--paused") >= 0) { media.Playing = false; media.PausedSinceUtc = at.ToUniversalTime(); }
         }
 
-        List<ViewModel> views = Views.Build(settings, at, weather, media, agenda);
+        // --ticked: the first task is ticked (Undo showing); --card: the first event's card is open; --hint: the first-run pill
+        var ui = new AgendaUi();
+        if (agenda != null && Array.IndexOf(args, "--ticked") >= 0 && agenda.Tasks?.Count > 0) ui.Completing[agenda.Tasks[0].Id] = DateTime.UtcNow.AddSeconds(5);
+        if (agenda != null && Array.IndexOf(args, "--card") >= 0 && agenda.Events?.Count > 0) ui.CardId = agenda.Events[0].Id;
+        List<ViewModel> views = Views.Build(settings, at, weather, media, agenda, ui);
         int IndexOf(string name)
         {
             ViewKind k = name switch
             {
                 "nowplaying" => ViewKind.NowPlaying, "countdown" or "done" => ViewKind.Countdown,
-                "agenda" => ViewKind.Agenda, "nextup" => ViewKind.NextUp, _ => ViewKind.Clock,
+                "agenda" => ViewKind.Agenda, "nextup" => ViewKind.NextUp, "home" => ViewKind.Home, _ => ViewKind.Clock,
             };
             return Math.Max(0, views.FindIndex(v => v.Kind == k));
         }
@@ -569,6 +662,15 @@ static class Preview
         using var art = new PanelArt(s, (int)Math.Round(8 * s));
         art.EnsureContent(vm);
         FrameState f = NewFrame(vm, views.Count, index);
+        if (Array.IndexOf(args, "--hint") >= 0) f.HintText = "SCROLL OR USE  ‹ ›  TO SWITCH   ·   RIGHT-CLICK FOR MORE";
+        string hoverKind = Arg("--hover-hit", null); // e.g. TaskDone:1, Weather, EdgeNext: the pointer over that spot
+        if (hoverKind != null)
+        {
+            string[] hk = hoverKind.Split(':');
+            int hi = hk.Length > 1 ? int.Parse(hk[1], CultureInfo.InvariantCulture) : -1;
+            f.HoverHit = art.Hits(f).FirstOrDefault(h => h.Kind.ToString() == hk[0] && (hi < 0 || h.Index == hi));
+            f.HoverT = 1;
+        }
         int hoverButton = vm.Kind == ViewKind.NowPlaying ? int.Parse(Arg("--hover", "-1"), CultureInfo.InvariantCulture) : -1;
 
         // --transition <view>: a strip of frames switching to that view (what the live widget animates)

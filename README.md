@@ -20,7 +20,9 @@ Glance lives **on the desktop layer**: above your wallpaper, under every window,
 | ![Next up](docs/images/next-up.png) | **Next up.** 15 minutes before a timed event the panel counts down to it, then shows "NOW · STARTED" for a few minutes. |
 | ![Countdown](docs/images/countdown.png) | **Countdowns.** Pin the launch, trip or deadline you're waiting for. In its final hour it takes over, whatever else is on. |
 
-**Smart, but yours.** Glance picks the view for you (a countdown's final hour, then Next up, then music, then a pinned countdown, otherwise the clock). Scroll over it or click the dots to switch; your choice holds for a few minutes.
+**Use it, don't just look at it.** Tick off tasks (with Undo), open an event for directions or its meeting link, add a task in plain words, jump around a song, scroll over the cover for the player's volume. Right-click for everything else.
+
+**Smart, but yours.** Glance picks the view for you (a countdown's final hour, then Next up, then music, then a pinned countdown, otherwise Home: the time with your weather, what's next, tasks, music and countdown beside it). Scroll over it, click the dots or use the ‹ › arrows to switch; your choice holds for a few minutes.
 
 **Made to stay out of the way.** It pauses every animation while a game or video is full screen, uses about a fifth of a percent of one CPU core, refreshes itself after sleep, and restarts itself if it ever stops unexpectedly.
 
@@ -38,19 +40,19 @@ Uninstall any time from **Settings › Apps › Installed apps › C.A.R.S. Glan
 
 ## Set it up
 
-Version 0.9 keeps its settings in a file; a Settings window arrives in 1.0. Open it from the Start menu: **C.A.R.S. Glance Settings**. Changes apply the moment you save.
+Everything is in the Settings window: Start menu › **C.A.R.S. Glance Settings**, or right-click the panel › Settings. It opens on a short Welcome page the first time. Changes apply within a second.
 
-- **Weather**: set your city's `latitude` and `longitude` (city level is plenty).
-- **Music**: list the players to follow in `nowPlaying.apps`, or leave it empty for any player.
-- **Todoist**: Start menu › **C.A.R.S. Glance - Connect Todoist**, then paste your API token (Todoist › Settings › Integrations › Developer).
-- **Calendar**: if you use [Spark](https://sparkmailapp.com), set `agenda.calendar` to `true` to show your Apple Calendar events. (iCloud, Google and Outlook calendars directly come in 1.1.)
-- **Countdowns**: add `{ "name": "Summer trip", "at": "2027-06-01T08:00", "pinned": true }`.
+- **Weather**: search for your city (only its rounded position is ever sent).
+- **Todoist**: Calendar & tasks › Connect, then paste your API token (Todoist › Settings › Integrations › Developer).
+- **Calendar**: if you use [Spark](https://sparkmailapp.com), turn on Apple Calendar through Spark. (iCloud, Google and Outlook calendars directly come in 1.1.)
+- **Music**: any player, or only the ones you list.
+- **Countdowns**: add, edit, pin and remove them.
+- **Appearance & accessibility**: accent colour, glass, size, position, displays, reduce motion, high contrast.
 
 ## Roadmap
 
 | Version | What's coming |
 |---|---|
-| 1.0 | Use the views, not just look at them: tick off tasks, seek and change volume, join meetings, quick-add tasks, a right-click menu, a full Settings window and first-run setup, a Home view, accessibility and battery-saver modes |
 | 1.1 | iCloud / Google / Outlook calendars directly, reminders as Windows notifications, a morning briefing |
 | 1.2 | Weather+: hourly and 5-day forecasts, severe-weather alerts, air quality, UV, sunrise and sunset |
 | 1.3 | Timers, alarms and a focus timer |

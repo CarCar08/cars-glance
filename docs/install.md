@@ -11,7 +11,7 @@
 2. Run the setup. Choose whether Glance starts when you sign in (recommended) and whether to open it now.
 3. Show your desktop (<kbd>Win</kbd>+<kbd>D</kbd>): the panel sits in the middle of every display.
 
-Setup installs into `%LOCALAPPDATA%\Programs\CARS Glance` and adds three Start menu entries: **C.A.R.S. Glance**, **C.A.R.S. Glance Settings** and **C.A.R.S. Glance - Connect Todoist**. It also adds a small scheduled task, "CARS Glance keep running", that starts Glance again within five minutes if it ever stops without you quitting it.
+Setup installs into `%LOCALAPPDATA%\Programs\CARS Glance` and adds two Start menu entries: **C.A.R.S. Glance** and **C.A.R.S. Glance Settings**. It also adds a small scheduled task, "CARS Glance keep running", that starts Glance again within five minutes if it ever stops without you quitting it.
 
 ### "Windows protected your PC"
 

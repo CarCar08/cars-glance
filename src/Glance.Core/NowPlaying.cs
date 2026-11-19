@@ -10,6 +10,9 @@ sealed class NowPlayingInfo
 {
     public string AppId = "", Title = "", Artist = "", Album = "";
     public bool Playing, CanPrevious, CanPlayPause, CanNext;
+    public bool CanSeek, CanShuffle, CanRepeat;   // what the player lets others change
+    public bool Shuffle;
+    public int Repeat;                            // 0 off, 1 this song, 2 the list
     public TimeSpan Position, Duration;
     public DateTime PositionUtc;                         // when Position was true
     public DateTime PausedSinceUtc = DateTime.MinValue;  // MinValue = we never saw it playing

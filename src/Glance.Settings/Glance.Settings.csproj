@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The Settings window: CarsGlance.Settings.exe, installed next to the widget and opened from its right-click
+       menu, the Start menu or "CarsGlance.exe /settings". Every option lives here; each change is saved to
+       settings.json at once and the running widget picks it up within a second. WPF + WPF-UI, like Setup. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>CarsGlance.Settings</AssemblyName>
+    <RootNamespace>Glance.SettingsApp</RootNamespace>
+    <AssemblyTitle>C.A.R.S. Glance Settings</AssemblyTitle>
+    <ApplicationIcon>..\Glance\Assets\glance.ico</ApplicationIcon>
+    <ApplicationManifest>..\Glance\app.manifest</ApplicationManifest>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="WPF-UI" Version="4.3.0" />
+    <ProjectReference Include="..\Glance.Core\Glance.Core.csproj" />
+    <ProjectReference Include="..\Glance.Setup.Core\Glance.Setup.Core.csproj" />
+    <Resource Include="..\Glance\Assets\glance.png" Link="Assets\glance.png" />
+    <Compile Include="..\Glance.Setup\DevWindowPlacement.cs" Link="DevWindowPlacement.cs" />
+  </ItemGroup>
+</Project>

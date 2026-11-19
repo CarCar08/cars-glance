@@ -91,7 +91,7 @@ namespace Glance.Setup
                         progress(84, "Adding the Start menu entries and the Installed apps entry");
                         _ops.CreateShortcut(_layout.StartMenuShortcut, exe, "", _layout.InstallDir, Product.Tagline, Product.Aumid);
                         _ops.CreateShortcut(_layout.SettingsShortcut, exe, "--settings", _layout.InstallDir, "Change what " + Product.Name + " shows", null);
-                        _ops.CreateShortcut(_layout.TodoistShortcut, exe, "--connect-todoist", _layout.InstallDir, "Paste your Todoist API token so your tasks show in the agenda", null);
+                        _ops.RemoveShortcut(_layout.TodoistShortcut); // 0.9: connecting Todoist now lives in Settings
                         _ops.WriteArp(ArpEntry.Values(_layout, _manifest, _manifest.TotalSize));
                         progress(90, startAtSignIn ? "Starting with Windows" : "Not starting with Windows");
                         _ops.SetRunAtSignIn(startAtSignIn, exe);

@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Glance.Core/Glance.Core.csproj" />
+    <Project Path="src/Glance.Settings/Glance.Settings.csproj" />
     <Project Path="src/Glance.Setup.Core/Glance.Setup.Core.csproj" />
     <Project Path="src/Glance.Setup/Glance.Setup.csproj" />
     <Project Path="src/Glance/Glance.csproj" />

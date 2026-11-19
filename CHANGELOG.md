@@ -2,6 +2,36 @@
 
 Each section becomes the release notes on GitHub. Newest first.
 
+## 1.0.0 — Interactive (2026-11-18)
+
+Glance is no longer just something to look at: click things on the panel to use them, and change everything in a proper Settings window.
+
+**Use the views**
+- **Agenda**: tick a task's ring to complete it in Todoist (it's struck through with **Undo** for 5 seconds first), click a task to open it in Todoist, click an event for a card with **Directions** and **Join** (meeting links are found in the location or notes), **+** adds a task in plain words ("Call the dentist tomorrow 3pm #Errands p1"), and "+ N more" pages through a long day.
+- **Now Playing**: click along the bar to jump, scroll over the cover to change that player's own volume, click the cover to bring the player up. Right-click for shuffle and repeat when the player allows them.
+- **Next up**: **Join meeting** and **Directions** when the event has them; right-click › Dismiss.
+- **Clock**: click the date for the agenda, the weather for the forecast.
+- **Countdowns**: right-click › Pin / Unpin.
+- Switching views: scroll anywhere, click a dot, or use the ‹ › arrows that appear at the edges. A click inside a view only ever does what's under the pointer; the hand cursor shows what's clickable.
+- **Right-click menu** (dark, in Glance's colours): what the view can do, then Stay on this view for an hour, Hide for an hour, Refresh, Settings, Check for updates and Quit.
+
+**Home**
+- A new first view: the time and date on the left, and beside it your weather, what's next, tasks due, the song playing and your nearest countdown. Click a line to go there. (Prefer the big clock? Settings › Views › First view.)
+
+**Settings window**
+- Start menu › **C.A.R.S. Glance Settings** (or right-click › Settings): General, Views (first view and order), Weather (search for your city), Calendar & tasks (connect Todoist, Spark, Next up timing), Music, Countdowns (an editor), Appearance, Accessibility, Updates and About. Every change applies within a second.
+- A **Welcome** page opens the first time Glance runs after a new install.
+- About › **Copy diagnostics** makes a short report for bug reports: versions, displays, which features are on and the recent log, with no tokens, places, names, titles or links.
+
+**Appearance and comfort**
+- Accent colour (red stays the default), glass darkness, size (70–160%, text grows with it), position (centre, top, bottom or a corner, clear of the taskbar) and which displays get a panel.
+- **Reduce motion** follows Windows' "Animation effects" (or always / never), **High contrast** gives solid glass and full-strength text, and on **battery saver** changes happen at once instead of animating.
+
+**Also**
+- Starting Glance again while it's hidden shows it at once.
+- The separate "Connect Todoist" Start menu entry is gone: it's in Settings now.
+
+
 ## 0.9.1 — Smoother digits (2026-11-18)
 
 **Fixes**

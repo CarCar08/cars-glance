@@ -184,6 +184,16 @@ sealed class MediaService
             CanPrevious = pb?.Controls.IsPreviousEnabled ?? false,
             CanNext = pb?.Controls.IsNextEnabled ?? false,
             CanPlayPause = pb != null && (pb.Controls.IsPlayEnabled || pb.Controls.IsPauseEnabled || pb.Controls.IsPlayPauseToggleEnabled),
+            CanSeek = pb?.Controls.IsPlaybackPositionEnabled ?? false,
+            CanShuffle = pb?.Controls.IsShuffleEnabled ?? false,
+            CanRepeat = pb?.Controls.IsRepeatEnabled ?? false,
+            Shuffle = pb?.IsShuffleActive ?? false,
+            Repeat = pb?.AutoRepeatMode switch
+            {
+                Windows.Media.MediaPlaybackAutoRepeatMode.Track => 1,
+                Windows.Media.MediaPlaybackAutoRepeatMode.List => 2,
+                _ => 0,
+            },
         };
         if (now < heldUntilUtc) n.Playing = heldPlaying;
         if (tl != null)
@@ -259,6 +269,98 @@ sealed class MediaService
     void OnTimeline(Session s, TimelinePropertiesChangedEventArgs e) => Request(0);
 
     // UI thread. Play/pause flips on screen at once; the player's report confirms it a moment later.
+    // Jump to a point in the song (0..1), if the player allows it.
+    public void Seek(float fraction)
+    {
+        Session s = session;
+        NowPlayingInfo cur = current;
+        if (s == null || cur == null || !cur.CanSeek || !cur.HasTimeline) return;
+        long ticks = (long)(cur.Duration.Ticks * Math.Clamp(fraction, 0, 1));
+        var tl = s.GetTimelineProperties();
+        long target = (tl?.StartTime.Ticks ?? 0) + ticks;
+        // show it at once; the player's report confirms it
+        NowPlayingInfo n = cur.Clone();
+        n.Position = TimeSpan.FromTicks(ticks);
+        n.PositionUtc = DateTime.UtcNow;
+        current = n;
+        Task.Run(async () =>
+        {
+            try { await s.TryChangePlaybackPositionAsync(target); }
+            catch (Exception ex) { LogOnce("media seek: " + ex.Message); }
+            Request(200);
+        });
+    }
+
+    public void ToggleShuffle()
+    {
+        Session s = session;
+        NowPlayingInfo cur = current;
+        if (s == null || cur == null || !cur.CanShuffle) return;
+        Task.Run(async () =>
+        {
+            try { await s.TryChangeShuffleActiveAsync(!cur.Shuffle); } catch (Exception ex) { LogOnce("media shuffle: " + ex.Message); }
+            Request(200);
+        });
+    }
+
+    // Off → the list → this song → off.
+    public void CycleRepeat()
+    {
+        Session s = session;
+        NowPlayingInfo cur = current;
+        if (s == null || cur == null || !cur.CanRepeat) return;
+        var next = cur.Repeat switch
+        {
+            0 => Windows.Media.MediaPlaybackAutoRepeatMode.List,
+            2 => Windows.Media.MediaPlaybackAutoRepeatMode.Track,
+            _ => Windows.Media.MediaPlaybackAutoRepeatMode.None,
+        };
+        Task.Run(async () =>
+        {
+            try { await s.TryChangeAutoRepeatModeAsync(next); } catch (Exception ex) { LogOnce("media repeat: " + ex.Message); }
+            Request(200);
+        });
+    }
+
+    // Brings the player's window up: Store apps through their Start-menu identity, desktop apps by process.
+    public void OpenPlayer()
+    {
+        string app = current?.AppId ?? sessionApp;
+        if (string.IsNullOrEmpty(app)) return;
+        try
+        {
+            if (app.Contains('!'))
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", "shell:AppsFolder\\" + app) { UseShellExecute = false })?.Dispose();
+                return;
+            }
+            string name = Path.GetFileNameWithoutExtension(app);
+            foreach (var p in System.Diagnostics.Process.GetProcessesByName(name))
+            {
+                if (p.MainWindowHandle != IntPtr.Zero)
+                {
+                    Native.ShowWindow(p.MainWindowHandle, 9 /* SW_RESTORE */);
+                    Native.SetForegroundWindow(p.MainWindowHandle);
+                    return;
+                }
+            }
+        }
+        catch (Exception ex) { LogOnce("open player: " + ex.Message); }
+    }
+
+    public string PlayerName
+    {
+        get
+        {
+            string app = current?.AppId ?? "";
+            if (app.Contains("Cider", StringComparison.OrdinalIgnoreCase)) return "Cider";
+            if (app.Contains("Spotify", StringComparison.OrdinalIgnoreCase)) return "Spotify";
+            if (app.Contains("AppleMusic", StringComparison.OrdinalIgnoreCase)) return "Apple Music";
+            if (app.Contains("ZuneMusic", StringComparison.OrdinalIgnoreCase)) return "Media Player";
+            return "the player";
+        }
+    }
+
     public void Command(MediaButton button)
     {
         Session s = session;

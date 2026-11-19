@@ -47,7 +47,7 @@ public class SetupTests : IDisposable
         Assert.True(File.Exists(layout.StartMenuShortcut));
         Assert.Contains(Product.Aumid, File.ReadAllText(layout.StartMenuShortcut));
         Assert.Contains("--settings", File.ReadAllText(layout.SettingsShortcut));
-        Assert.Contains("--connect-todoist", File.ReadAllText(layout.TodoistShortcut));
+        Assert.False(File.Exists(layout.TodoistShortcut)); // moved into Settings in 1.0
         Assert.True(File.Exists(Path.Combine(layout.Sandbox!, "run-at-sign-in.txt")));
         Assert.True(File.Exists(Path.Combine(layout.Sandbox!, "watchdog.txt")));
         using (var arp = JsonDocument.Parse(File.ReadAllText(layout.SandboxArpFile)))

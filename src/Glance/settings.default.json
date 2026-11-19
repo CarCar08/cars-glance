@@ -1,6 +1,6 @@
 {
   // C.A.R.S. Glance settings. Save this file and the widget picks up the change within a second.
-  // (A Settings window replaces this file in version 1.0.)
+  // The Settings window (Start menu > C.A.R.S. Glance Settings) edits this file for you.
 
   // false = 12-hour clock with AM/PM, true = 24-hour clock
   "use24HourClock": false,
@@ -29,7 +29,7 @@
   // Agenda (a click away) and Next up (takes the screen "nextUpMinutes" before a timed event and stays
   // "nextUpHoldMinutes" after it starts).
   // Calendar: Apple Calendar read through Spark Desktop, if you use Spark (it refreshes while Spark is open).
-  // Todoist: tasks due today and overdue. Connect it from the Start menu: "C.A.R.S. Glance – Connect Todoist".
+  // Todoist: tasks due today and overdue. Connect it in Settings > Calendar & tasks.
   "agenda": {
     "enabled": true,
     "calendar": false,

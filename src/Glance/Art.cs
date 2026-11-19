@@ -7,11 +7,21 @@ namespace Glance;
 
 static class Style
 {
-    public static readonly Color Red = Color.FromArgb(255, 255, 40, 28);   // the wallpaper's red, lifted for legibility
+    // The accent (Settings > Appearance; red by default), and how strong the secondary text and the glass are.
+    // Set before the panels are built (Apply); a change rebuilds them.
+    public static Color Red = Color.FromArgb(255, 255, 40, 28);
     public static readonly Color Ink = Color.FromArgb(255, 255, 255, 255);
-    public static readonly Color Muted = Color.FromArgb(215, 255, 255, 255);
-    public static readonly Color Faint = Color.FromArgb(150, 255, 255, 255);
-    public const int GlassAlpha = 100;                                       // how much the glass darkens the blurred wallpaper
+    public static Color Muted = Color.FromArgb(215, 255, 255, 255);
+    public static Color Faint = Color.FromArgb(150, 255, 255, 255);
+    public static int GlassAlpha = 100;                                      // how much the glass darkens the blurred wallpaper
+
+    public static void Apply(AppearanceSetting look, bool highContrast)
+    {
+        Red = look.AccentColor;
+        GlassAlpha = highContrast ? 235 : (int)Math.Round(look.Glass * 2.5);
+        Muted = Color.FromArgb(highContrast ? 255 : 215, 255, 255, 255);
+        Faint = Color.FromArgb(highContrast ? 228 : 150, 255, 255, 255);
+    }
     public const int TintAlpha = 34;                                         // Now Playing: the cover's colour over the glass
     public static readonly FontFamily Bold = Pick("Bahnschrift SemiBold", "Segoe UI Semibold", "Segoe UI");
     public static readonly FontFamily Text = Pick("Bahnschrift", "Segoe UI");
@@ -69,6 +79,8 @@ sealed class FrameState
     public readonly float[] Press = new float[3];  // Now Playing: click dip per button, 0..1..0
     public float PlayMorph = 1;                    // Now Playing: 0 = play triangle, 1 = pause bars
     public string UpdateText;                      // the "Update ready" pill, or null
+    public string HintText;                        // first-run hint pill (top left), or null
+    public Hit HoverHit = Hit.Nothing;             // what the pointer is over
 }
 
 // One row of rolling digit columns with colons between them.
@@ -258,8 +270,8 @@ sealed class PanelArt : IDisposable
     readonly StringFormat fmt = Art.Typographic();
     readonly Bitmap glass, edgeHover;
     readonly DigitRow countdownRow;
-    DigitRow clockRow, nextUpRow;
-    bool clockRowHasSuffix;
+    DigitRow clockRow, nextUpRow, homeRow;
+    bool clockRowHasSuffix, homeRowHasSuffix;
     Bitmap content, blend;
     string contentKey;
     float blendT = -1;
@@ -375,11 +387,58 @@ sealed class PanelArt : IDisposable
         return clockRow;
     }
 
+    // Home: hours and minutes, centred in the left part of the panel (beside the list of lines).
+    const float HomeLeftCentre = 266, HomeDivider = 504, HomeLabelX = 536, HomeTextX = 664, HomeDigitPx = 128, HomeDateTop = 105, HomeDigitTop = 148;
+
+    DigitRow HomeRow(bool suffix)
+    {
+        if (homeRow != null && homeRowHasSuffix == suffix) return homeRow;
+        homeRow?.Dispose();
+        float colW = Art.Advance("00", Style.Bold, HomeDigitPx * S, fmt) + 6 * S, sep = 46 * S;
+        float rowW = colW * 2 + sep, extra = suffix ? Art.Advance("PM", Style.Text, 30 * S, fmt) + 12 * S : 0;
+        float x0 = HomeLeftCentre * S - (rowW + extra) / 2;
+        homeRow = new DigitRow(S, W, 2, colW, sep, HomeDigitPx * S, HomeDigitTop * S, x0 - (W - rowW) / 2, true, fmt);
+        homeRowHasSuffix = suffix;
+        return homeRow;
+    }
+
+    float HomeLineY(int k, int n) => (172 - (n - 1) * 24 + 48 * k) * S;
+
+    void DrawHome(Graphics g, ViewModel vm)
+    {
+        float s = S;
+        DigitRow row = HomeRow(vm.Suffix != null);
+        float blockL = row.ColRects[0].Left + 4 * s, blockR = vm.Suffix != null ? row.RowRight + 12 * s + Art.Advance(vm.Suffix, Style.Text, 30 * s, fmt) : row.RowRight;
+        Art.Text(g, vm.Title, Style.Bold, 22 * s, 6 * s, Style.Red, (blockL + blockR) / 2, HomeDateTop * s, fmt, true);
+        row.DrawColons(g);
+        if (vm.Suffix != null)
+            Art.TextLeft(g, vm.Suffix, Style.Text, 30 * s, 2.5f * s, Style.Muted, row.RowRight + 12 * s, row.DigitTop + 2 * s, fmt);
+        using (var div = new Pen(Color.FromArgb(26, 255, 255, 255), Math.Max(1f, s)))
+            g.DrawLine(div, HomeDivider * s, 70 * s, HomeDivider * s, 278 * s);
+
+        int n = vm.Lines?.Count ?? 0;
+        if (n == 0)
+        {
+            Art.TextLeft(g, "All quiet", Style.Text, 26 * s, 0.5f * s, Style.Faint, HomeLabelX * s, 172 * s - Cap(Style.Text, 26 * s) / 2, fmt);
+            return;
+        }
+        float capLabel = Cap(Style.Bold, 14 * s), capText = Cap(Style.Text, 22 * s), textMax = W - 56 * s - HomeTextX * s;
+        for (int k = 0; k < n; k++)
+        {
+            HomeLine line = vm.Lines[k];
+            float cy = HomeLineY(k, n);
+            Art.TextLeft(g, line.Label, Style.Bold, 14 * s, 2.5f * s, line.Alert ? Style.Red : Style.Faint, HomeLabelX * s, cy - capLabel / 2, fmt);
+            FontFamily tf = Style.For(line.Text, false);
+            Art.TextLeft(g, Art.Fit(g, line.Text, tf, 22 * s, 0.4f * s, textMax, fmt), tf, 22 * s, 0.4f * s, Style.Ink, HomeTextX * s, cy - capText / 2, fmt);
+        }
+    }
+
     public DigitRow RowFor(ViewModel vm)
     {
         if (vm == null || vm.Values == null) return null;
         return vm.Kind switch
         {
+            ViewKind.Home => HomeRow(vm.Suffix != null),
             ViewKind.Clock => ClockRow(vm.Suffix != null),
             ViewKind.NextUp => nextUpRow ??= new DigitRow(S, W, 2, Art.Advance("00", Style.Bold, 112 * S, fmt) + 6 * S, 64 * S, 112 * S, 134 * S, 0, false, fmt),
             _ => countdownRow,
@@ -410,19 +469,83 @@ sealed class PanelArt : IDisposable
             }
         }
         FontFamily footFont = Style.For(vm.Footer, false);
-        Art.Text(g, Art.Fit(g, vm.Footer, footFont, 20 * s, 4 * s, W - 200 * s, fmt), footFont, 20 * s, 4 * s, Style.Faint, cx, 280 * s, fmt, false);
+        // with a place to go, the footer reads a little brighter: it's a link to directions
+        Art.Text(g, Art.Fit(g, vm.Footer, footFont, 20 * s, 4 * s, W - 200 * s, fmt), footFont, 20 * s, 4 * s, vm.MapsUrl != null ? Style.Muted : Style.Faint, cx, 280 * s, fmt, false);
+        if (vm.JoinUrl != null)
+        {
+            Rectangle j = JoinRect(g);
+            DrawPill(g, j, "JOIN MEETING", true);
+        }
     }
 
-    // ---- Agenda: "TODAY" and a summary, then up to four lines (time, marker, title, note).
+    // ---- Agenda: "TODAY", a summary and "+", then up to four lines (time, marker, title, note). A ticked task
+    // shows struck through with an UNDO pill for 5 seconds; an event can open a detail card over the list.
+    float AgLeft => 72 * S;
+    float AgRight => W - 72 * S;
+    float AgRowY(int k) => (112 + 52 * k) * S;
+    const float AgTimeRight = 204, AgMarkX = 228, AgTitleLeft = 252;
+
+    Rectangle AddButtonRect => Rectangle.FromLTRB((int)(AgRight - 32 * S), (int)(34 * S), (int)Math.Ceiling(AgRight + 2 * S), (int)Math.Ceiling(68 * S));
+
+    Rectangle UndoRect(int k)
+    {
+        float cy = AgRowY(k);
+        return Rectangle.FromLTRB((int)(AgRight - 104 * S), (int)(cy - 17 * S), (int)Math.Ceiling(AgRight), (int)Math.Ceiling(cy + 17 * S));
+    }
+
+    RectangleF CardRect => RectangleF.FromLTRB(AgLeft - 8 * S, 80 * S, AgRight + 8 * S, 304 * S);
+
+    // The card's buttons, right to left: CLOSE, then JOIN and DIRECTIONS when the event has them.
+    List<(HitKind Kind, Rectangle Rect, string Label)> CardButtons(Graphics g, AgendaCard c)
+    {
+        var list = new List<(HitKind, Rectangle, string)>();
+        float x = CardRect.Right - 24 * S, y = 252 * S, h = 36 * S;
+        void Add(HitKind kind, string label)
+        {
+            float w = Art.Measure(g, label, Style.Bold, 17 * S, 2.5f * S, fmt) + 40 * S;
+            var r = Rectangle.FromLTRB((int)(x - w), (int)y, (int)Math.Ceiling(x), (int)Math.Ceiling(y + h));
+            list.Add((kind, r, label));
+            x -= w + 12 * S;
+        }
+        Add(HitKind.CardClose, "CLOSE");
+        if (c.JoinUrl != null) Add(HitKind.CardJoin, "JOIN");
+        if (c.MapsUrl != null) Add(HitKind.CardDirections, "DIRECTIONS");
+        return list;
+    }
+
+    void DrawPill(Graphics g, Rectangle r, string label, bool primary)
+    {
+        using GraphicsPath p = Art.Rounded(r, r.Height / 2f);
+        using (var fill = new SolidBrush(primary ? Color.FromArgb(225, Style.Red) : Color.FromArgb(34, 255, 255, 255))) g.FillPath(fill, p);
+        if (!primary) using (var edge = new Pen(Color.FromArgb(70, 255, 255, 255), Math.Max(1f, S))) g.DrawPath(edge, p);
+        Art.Text(g, label, Style.Bold, 17 * S, 2.5f * S, Style.Ink, r.X + r.Width / 2f, r.Y + (r.Height - Cap(Style.Bold, 17 * S)) / 2, fmt, false);
+    }
+
     void DrawAgenda(Graphics g, ViewModel vm)
     {
-        float s = S, cx = W / 2f, left = 72 * s, right = W - 72 * s;
+        float s = S, cx = W / 2f, left = AgLeft, right = AgRight;
         Art.TextLeft(g, vm.Title, Style.Bold, 24 * s, 7 * s, Style.Red, left, 44 * s, fmt, true);
+        float noteRight = right;
+        if (vm.CanAdd)
+        {
+            Rectangle a = AddButtonRect;
+            float r = a.Height / 2f, acx = a.X + a.Width / 2f, acy = a.Y + a.Height / 2f;
+            using (var ring = new Pen(Color.FromArgb(150, 255, 255, 255), Math.Max(1.4f, 1.8f * s))) g.DrawEllipse(ring, acx - r + s, acy - r + s, 2 * r - 2 * s, 2 * r - 2 * s);
+            using (var plus = new Pen(Style.Ink, 2.4f * s) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+            {
+                g.DrawLine(plus, acx - 7 * s, acy, acx + 7 * s, acy);
+                g.DrawLine(plus, acx, acy - 7 * s, acx, acy + 7 * s);
+            }
+            noteRight = a.X - 16 * s;
+        }
         if (!string.IsNullOrEmpty(vm.Note))
         {
-            string note = Art.Fit(g, vm.Note, Style.Text, 17 * s, 3 * s, right - left - 220 * s, fmt);
-            Art.TextRight(g, note, Style.Text, 17 * s, 3 * s, Style.Faint, right, 44 * s + (Cap(Style.Bold, 24 * s) - Cap(Style.Text, 17 * s)) / 2, fmt);
+            string note = Art.Fit(g, vm.Note, Style.Text, 17 * s, 3 * s, noteRight - left - 220 * s, fmt);
+            Art.TextRight(g, note, Style.Text, 17 * s, 3 * s, Style.Faint, noteRight, 44 * s + (Cap(Style.Bold, 24 * s) - Cap(Style.Text, 17 * s)) / 2, fmt);
         }
+
+        // An open card replaces the list (drawing it over the rows left them showing through the tint).
+        if (vm.Card != null) { DrawCard(g, vm.Card); return; }
 
         if (vm.Rows.Count == 0)
         {
@@ -436,13 +559,13 @@ sealed class PanelArt : IDisposable
             return;
         }
 
-        float timeRight = 204 * s, markX = 228 * s, titleLeft = 252 * s;
+        float timeRight = AgTimeRight * s, markX = AgMarkX * s, titleLeft = AgTitleLeft * s;
         float capTime = Cap(Style.Text, 22 * s), capTitle = Cap(Style.Text, 28 * s), capNote = Cap(Style.Text, 17 * s);
         using var line = new Pen(Color.FromArgb(18, 255, 255, 255), Math.Max(1f, s));
         for (int k = 0; k < vm.Rows.Count; k++)
         {
             AgendaRow row = vm.Rows[k];
-            float cy = (112 + 52 * k) * s;
+            float cy = AgRowY(k);
             if (k > 0) g.DrawLine(line, titleLeft, cy - 26 * s, right, cy - 26 * s);
             if (row.More)
             {
@@ -460,11 +583,27 @@ sealed class PanelArt : IDisposable
             else if (row.Marker == RowMarker.Ring)
             {
                 float r = 8.5f * s;
-                using var pen = new Pen(row.MarkerColor, 2.2f * s);
-                g.DrawEllipse(pen, markX - r, cy - r, 2 * r, 2 * r);
+                if (row.Completing)
+                {
+                    // ticked: a filled ring with a check
+                    using (var fill = new SolidBrush(row.MarkerColor)) g.FillEllipse(fill, markX - r - s, cy - r - s, 2 * r + 2 * s, 2 * r + 2 * s);
+                    using var check = new Pen(Color.FromArgb(240, 20, 10, 12), 2.2f * s) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+                    g.DrawLines(check, new[] { new PointF(markX - 4.5f * s, cy), new PointF(markX - 1 * s, cy + 3.5f * s), new PointF(markX + 5 * s, cy - 4 * s) });
+                }
+                else
+                {
+                    using var pen = new Pen(row.MarkerColor, 2.2f * s);
+                    g.DrawEllipse(pen, markX - r, cy - r, 2 * r, 2 * r);
+                }
             }
             float titleRight = right;
-            if (!string.IsNullOrWhiteSpace(row.Right))
+            if (row.Completing)
+            {
+                Rectangle u = UndoRect(k);
+                DrawPill(g, u, "UNDO", false);
+                titleRight = u.X - 20 * s;
+            }
+            else if (!string.IsNullOrWhiteSpace(row.Right))
             {
                 string note = Art.Fit(g, row.Right.ToUpperInvariant(), Style.For(row.Right, false), 17 * s, 2.5f * s, 240 * s, fmt);
                 FontFamily nf = Style.For(note, false);
@@ -472,8 +611,42 @@ sealed class PanelArt : IDisposable
                 titleRight = right - Art.Measure(g, note, nf, 17 * s, 2.5f * s, fmt) - 28 * s;
             }
             FontFamily tf = Style.For(row.Title, false);
-            Art.TextLeft(g, Art.Fit(g, row.Title, tf, 28 * s, 0.3f * s, titleRight - titleLeft, fmt), tf, 28 * s, 0.3f * s, Style.Ink, titleLeft, cy - capTitle / 2, fmt);
+            string title = Art.Fit(g, row.Title, tf, 28 * s, 0.3f * s, titleRight - titleLeft, fmt);
+            Art.TextLeft(g, title, tf, 28 * s, 0.3f * s, row.Completing ? Style.Faint : Style.Ink, titleLeft, cy - capTitle / 2, fmt);
+            if (row.Completing)
+            {
+                float w = Art.Measure(g, title, tf, 28 * s, 0.3f * s, fmt);
+                using var strike = new Pen(Color.FromArgb(170, 255, 255, 255), Math.Max(1.4f, 2 * s));
+                g.DrawLine(strike, titleLeft, cy, titleLeft + w, cy);
+            }
         }
+    }
+
+    // An event's detail card, over the list: name, time, place, a line of notes, and its buttons.
+    void DrawCard(Graphics g, AgendaCard c)
+    {
+        float s = S;
+        RectangleF r = CardRect;
+        using (GraphicsPath p = Art.Rounded(r, 16 * s))
+        {
+            using (var fill = new SolidBrush(Color.FromArgb(16, 255, 255, 255))) g.FillPath(fill, p);
+            using (var edge = new Pen(Color.FromArgb(46, 255, 255, 255), Math.Max(1f, s))) g.DrawPath(edge, p);
+        }
+        float x = r.X + 28 * s, width = r.Width - 56 * s;
+        FontFamily tf = Style.For(c.Title, true);
+        Art.TextLeft(g, Art.Fit(g, c.Title, tf, 32 * s, 0.4f * s, width, fmt), tf, 32 * s, 0.4f * s, Style.Ink, x, 104 * s, fmt, true);
+        Art.TextLeft(g, c.When.ToUpperInvariant(), Style.Text, 20 * s, 3 * s, Style.Red, x, 152 * s, fmt);
+        if (!string.IsNullOrWhiteSpace(c.Where))
+        {
+            FontFamily wf = Style.For(c.Where, false);
+            Art.TextLeft(g, Art.Fit(g, c.Where, wf, 22 * s, 0.5f * s, width, fmt), wf, 22 * s, 0.5f * s, Style.Muted, x, 184 * s, fmt);
+        }
+        if (!string.IsNullOrWhiteSpace(c.Notes))
+        {
+            FontFamily nf = Style.For(c.Notes, false);
+            Art.TextLeft(g, Art.Fit(g, c.Notes, nf, 19 * s, 0.5f * s, width, fmt), nf, 19 * s, 0.5f * s, Style.Faint, x, 216 * s, fmt);
+        }
+        foreach (var (kind, rect, label) in CardButtons(g, c)) DrawPill(g, rect, label, kind == HitKind.CardJoin);
     }
 
     public bool EnsureContent(ViewModel vm)
@@ -508,6 +681,10 @@ sealed class PanelArt : IDisposable
         else if (vm.Kind == ViewKind.NextUp)
         {
             DrawNextUp(g, vm);
+        }
+        else if (vm.Kind == ViewKind.Home)
+        {
+            DrawHome(g, vm);
         }
         else if (vm.Kind == ViewKind.Clock)
         {
@@ -726,6 +903,7 @@ sealed class PanelArt : IDisposable
         g.CompositingMode = CompositingMode.SourceOver;
         if (f.HoverT > 0.004f) Art.DrawFaded(g, edgeHover, clip, Motion.Smooth(f.HoverT));
         DrawLayers(g, clip, f);
+        DrawInteractive(g, f);
         if (DotsRect.IntersectsWith(clip)) DrawDots(g, f);
         if (f.UpdateText != null && UpdateRect.IntersectsWith(clip)) DrawUpdatePill(g, f.UpdateText);
         g.ResetClip();
@@ -768,6 +946,152 @@ sealed class PanelArt : IDisposable
         g.FillPath(pb, pp);
     }
 
+    // ---- What's under the pointer (1.0): everything clickable on the current view, most specific first.
+
+    public Rectangle HintRect => Rectangle.FromLTRB((int)(14 * S), (int)(10 * S), (int)Math.Ceiling(W * 0.62f), (int)Math.Ceiling(38 * S));
+
+    Rectangle JoinRect(Graphics g) =>
+        Rectangle.FromLTRB((int)(14 * S), (int)(10 * S), (int)Math.Ceiling(14 * S + Art.Measure(g, "JOIN MEETING", Style.Bold, 15 * S, 2.5f * S, fmt) + 44 * S), (int)Math.Ceiling(40 * S));
+
+    Rectangle TextBounds(Graphics g, string text, FontFamily family, float px, float tracking, float centreX, float capTop, float maxW = float.MaxValue)
+    {
+        float w = Math.Min(maxW, Art.Measure(g, text, family, px, tracking, fmt));
+        float cap = Cap(family, px);
+        return Rectangle.FromLTRB((int)(centreX - w / 2 - 14 * S), (int)(capTop - 10 * S), (int)Math.Ceiling(centreX + w / 2 + 14 * S), (int)Math.Ceiling(capTop + cap + 10 * S));
+    }
+
+    public Hit HitTest(FrameState f, int x, int y)
+    {
+        foreach (Hit h in Hits(f))
+            if (h.Rect.Contains(x, y)) return h;
+        return Hit.Nothing;
+    }
+
+    public List<Hit> Hits(FrameState f)
+    {
+        var list = new List<Hit>();
+        float s = S;
+        using var mb = new Bitmap(1, 1);
+        using Graphics g = Graphics.FromImage(mb);
+        ViewModel vm = f.View;
+        if (f.UpdateText != null) list.Add(new Hit(HitKind.Update, UpdateRect));
+        if (vm?.Kind == ViewKind.NextUp && vm.JoinUrl != null) list.Add(new Hit(HitKind.NextJoin, JoinRect(g)));
+        else if (f.HintText != null) list.Add(new Hit(HitKind.Hint, HintRect));
+        if (f.DotCount > 1)
+        {
+            float x0 = W / 2f - (f.DotCount - 1) * dotSpacing / 2;
+            for (int i = 0; i < f.DotCount; i++)
+                list.Add(new Hit(HitKind.Dot, Rectangle.FromLTRB((int)(x0 + i * dotSpacing - dotSpacing / 2), (int)(dotY - 16 * s), (int)Math.Ceiling(x0 + i * dotSpacing + dotSpacing / 2), (int)Math.Ceiling(dotY + 16 * s)), i));
+        }
+        list.Add(new Hit(HitKind.EdgePrev, Rectangle.FromLTRB(0, (int)(44 * s), (int)(50 * s), (int)(H - 44 * s))));
+        list.Add(new Hit(HitKind.EdgeNext, Rectangle.FromLTRB((int)(W - 50 * s), (int)(44 * s), W, (int)(H - 44 * s))));
+        if (vm == null) return list;
+
+        switch (vm.Kind)
+        {
+            case ViewKind.NowPlaying:
+                for (int i = 0; i < 3; i++)
+                    list.Add(new Hit(HitKind.Media, Rectangle.FromLTRB((int)(ControlsRect.X + i * buttonCell), ControlsRect.Y, (int)Math.Ceiling(ControlsRect.X + (i + 1) * buttonCell), ControlsRect.Bottom), i));
+                if (vm.Media != null && vm.Media.HasTimeline && vm.Media.CanSeek)
+                {
+                    RectangleF bar = BarFor(vm.Media);
+                    list.Add(new Hit(HitKind.Seek, Rectangle.FromLTRB((int)(bar.X - 4 * s), (int)(bar.Y - 14 * s), (int)Math.Ceiling(bar.Right + 4 * s), (int)Math.Ceiling(bar.Bottom + 14 * s))));
+                }
+                list.Add(new Hit(HitKind.Cover, Rectangle.Round(coverRect)));
+                break;
+            case ViewKind.Clock:
+                list.Add(new Hit(HitKind.Date, TextBounds(g, vm.Title, Style.Bold, 26 * s, 8.5f * s, W / 2f, 52 * s)));
+                if (vm.Footer != null) list.Add(new Hit(HitKind.Weather, TextBounds(g, vm.Footer, Style.Text, 22 * s, 3.5f * s, W / 2f, 250 * s)));
+                break;
+            case ViewKind.Agenda:
+                if (vm.CanAdd) list.Add(new Hit(HitKind.AddTask, AddButtonRect));
+                if (vm.Card != null)
+                {
+                    foreach (var (kind, rect, _) in CardButtons(g, vm.Card)) list.Add(new Hit(kind, rect));
+                    break; // the list under the card isn't clickable while it's open
+                }
+                for (int k = 0; vm.Rows != null && k < vm.Rows.Count; k++)
+                {
+                    AgendaRow row = vm.Rows[k];
+                    float cy = AgRowY(k);
+                    var line = Rectangle.FromLTRB((int)(AgTitleLeft * s - 10 * s), (int)(cy - 24 * s), (int)Math.Ceiling(AgRight + 6 * s), (int)Math.Ceiling(cy + 24 * s));
+                    if (row.More) { list.Add(new Hit(HitKind.More, line, k)); continue; }
+                    if (row.Source == AgendaSource.Todoist)
+                    {
+                        if (row.Completing) { list.Add(new Hit(HitKind.Undo, UndoRect(k), k)); continue; }
+                        list.Add(new Hit(HitKind.TaskDone, Rectangle.FromLTRB((int)(AgMarkX * s - 20 * s), (int)(cy - 22 * s), (int)Math.Ceiling(AgMarkX * s + 18 * s), (int)Math.Ceiling(cy + 22 * s)), k));
+                        list.Add(new Hit(HitKind.TaskOpen, line, k));
+                    }
+                    else list.Add(new Hit(HitKind.EventOpen, line, k));
+                }
+                break;
+            case ViewKind.NextUp:
+                if (vm.MapsUrl != null && vm.Footer != null) list.Add(new Hit(HitKind.NextDirections, TextBounds(g, vm.Footer, Style.Text, 20 * s, 4 * s, W / 2f, 280 * s, W - 200 * s)));
+                break;
+            case ViewKind.Countdown:
+                list.Add(new Hit(HitKind.Countdown, Rectangle.FromLTRB((int)(60 * s), (int)(80 * s), (int)(W - 60 * s), (int)(250 * s))));
+                break;
+            case ViewKind.Home:
+                for (int k = 0; vm.Lines != null && k < vm.Lines.Count; k++)
+                {
+                    float cy = HomeLineY(k, vm.Lines.Count);
+                    list.Add(new Hit(HitKind.HomeLine, Rectangle.FromLTRB((int)((HomeLabelX - 14) * s), (int)(cy - 22 * s), (int)Math.Ceiling(W - 48 * s), (int)Math.Ceiling(cy + 22 * s)), k));
+                }
+                break;
+        }
+        return list;
+    }
+
+    // Where along the progress bar (0..1) a click at x lands.
+    public float SeekFraction(NowPlayingInfo m, int x)
+    {
+        RectangleF bar = BarFor(m);
+        return Motion.Clamp01((x - bar.X) / Math.Max(1f, bar.Width));
+    }
+
+    // The hover layer: a soft plate behind hovered text, a tick preview on a task's ring, the ‹ › edge arrows,
+    // and the first-run hint. Drawn over the view (and faded with it).
+    void DrawInteractive(Graphics g, FrameState f)
+    {
+        float s = S;
+        Hit h = f.HoverHit;
+        if (h.Plate && f.HoverT > 0.01f)
+        {
+            using GraphicsPath p = Art.Rounded(h.Rect, 10 * s);
+            using var plate = new SolidBrush(Color.FromArgb((int)(20 * f.HoverT), 255, 255, 255));
+            g.FillPath(plate, p);
+        }
+        if (h.Kind == HitKind.TaskDone && f.View?.Rows != null && h.Index >= 0 && h.Index < f.View.Rows.Count)
+        {
+            float cy = AgRowY(h.Index), r = 8.5f * s, mx = AgMarkX * s;
+            using var preview = new SolidBrush(Color.FromArgb(110, f.View.Rows[h.Index].MarkerColor));
+            g.FillEllipse(preview, mx - r, cy - r, 2 * r, 2 * r);
+        }
+        if (f.HoverT > 0.01f)
+        {
+            float cy = H / 2f, half = 13 * s, depth = 7 * s;
+            for (int side = 0; side < 2; side++)
+            {
+                bool over = (side == 0 && h.Kind == HitKind.EdgePrev) || (side == 1 && h.Kind == HitKind.EdgeNext);
+                int a = (int)((over ? 235 : 95) * Motion.Smooth(f.HoverT));
+                float cx = side == 0 ? 26 * s : W - 26 * s, dir = side == 0 ? 1 : -1;
+                using var pen = new Pen(Color.FromArgb(a, 255, 255, 255), 3.2f * s) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+                g.DrawLines(pen, new[] { new PointF(cx + dir * depth / 2, cy - half), new PointF(cx - dir * depth / 2, cy), new PointF(cx + dir * depth / 2, cy + half) });
+            }
+        }
+        bool join = f.View?.Kind == ViewKind.NextUp && f.View.JoinUrl != null;
+        if (f.HintText != null && !join)
+        {
+            Rectangle r = HintRect;
+            float textW = Art.Measure(g, f.HintText, Style.Text, 15 * s, 1.5f * s, fmt);
+            var pill = RectangleF.FromLTRB(r.X, r.Y, Math.Min(r.Right, r.X + textW + 30 * s), r.Bottom);
+            using (GraphicsPath p = Art.Rounded(pill, r.Height / 2f))
+            using (var fill = new SolidBrush(Color.FromArgb(34, 255, 255, 255)))
+                g.FillPath(fill, p);
+            Art.TextLeft(g, f.HintText, Style.Text, 15 * s, 1.5f * s, Style.Muted, r.X + 15 * s, r.Y + (r.Height - Cap(Style.Text, 15 * s)) / 2, fmt);
+        }
+    }
+
     // Which dot (if any) a click at panel coordinates hits.
     public int DotAt(int x, int y, int count)
     {
@@ -786,6 +1110,7 @@ sealed class PanelArt : IDisposable
         countdownRow.Dispose();
         clockRow?.Dispose();
         nextUpRow?.Dispose();
+        homeRow?.Dispose();
         fmt.Dispose();
     }
 }

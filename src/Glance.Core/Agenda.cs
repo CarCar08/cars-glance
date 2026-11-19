@@ -11,9 +11,10 @@ sealed class AgendaSetting
 {
     public bool Enabled { get; set; } = true;
     public bool Calendar { get; set; } = false;  // Apple Calendar through Spark Desktop (only if you use Spark)
-    public bool Todoist { get; set; } = true;    // tasks due today and overdue (connect from the Start menu)
+    public bool Todoist { get; set; } = true;    // tasks due today and overdue (connect in Settings)
     public int NextUpMinutes { get; set; } = 15;
     public int NextUpHoldMinutes { get; set; } = 5; // stays up this long after the start
+    public bool NextUp { get; set; } = true;     // the Next up view (the agenda still shows the event)
     public string SparkPath { get; set; } = "";  // blank: find spark.exe automatically
 }
 
@@ -29,7 +30,22 @@ sealed class AgendaItem
     public int Priority = 1;      // Todoist: 4 = p1 (highest) ... 1 = p4
     public Color? Color;          // calendar colour when Spark reports one
     public bool AlsoInTodoist;    // an event that matched a Todoist task (shown once)
+    public string Notes = "";     // event notes / task description (for the detail card and meeting links)
 }
+
+// What you're doing with the agenda right now, shared by every display: which page, which event's card is
+// open, which tasks you just ticked (they wait 5 seconds for Undo before Todoist hears about them).
+sealed class AgendaUi
+{
+    public int Page;
+    public string CardId;
+    public readonly Dictionary<string, DateTime> Completing = new(); // task id -> when it's sent to Todoist (UTC)
+    public readonly HashSet<string> Done = new();                     // sent; hidden until the next fetch drops them
+    public readonly HashSet<string> Dismissed = new();                // Next up ids you closed ("Dismiss")
+}
+
+// The open card for an event: everything about it plus the links its buttons open.
+sealed record AgendaCard(string Id, string Title, string When, string Where, string Notes, string MapsUrl, string JoinUrl);
 
 // What the views read: the latest items from both sources and a short status for each.
 sealed class AgendaData
@@ -67,6 +83,7 @@ static class Agenda
                 Id = Str(e, "id", "event_id", "uid") ?? "",
                 Title = Clean(title ?? "(no title)"),
                 Where = Clean(Str(e, "location", "place") ?? ""),
+                Notes = (Str(e, "notes", "description") ?? "").Trim(),
                 Group = Str(e, "calendar", "calendar_name", "calendar_title") ?? "",
                 Start = allDay ? start.Date : start,
                 End = end,
@@ -102,6 +119,7 @@ static class Agenda
                 Source = AgendaSource.Todoist,
                 Id = Str(t, "id") ?? "",
                 Title = Clean(Str(t, "content") ?? ""),
+                Notes = (Str(t, "description") ?? "").Trim(),
                 Group = projects != null && projects.TryGetValue(projectId, out string name) ? name : "",
                 Start = start,
                 End = end,
@@ -220,6 +238,33 @@ static class Agenda
     }
 
     public static string Time(DateTime t) => t.ToString(t.Minute == 0 ? "h tt" : "h:mm tt", En);
+
+    // Google Maps directions to a place (opens in the default browser).
+    public static string Directions(string place) =>
+        string.IsNullOrWhiteSpace(place) ? null : "https://www.google.com/maps/dir/?api=1&destination=" + Uri.EscapeDataString(place.Trim());
+
+    // A meeting link in an event's location or notes: Zoom, Meet, Teams, Webex, Whereby, FaceTime first,
+    // otherwise the first https link.
+    public static string MeetingLink(params string[] texts)
+    {
+        string[] known = { "zoom.us/", "meet.google.com/", "teams.microsoft.com/", "teams.live.com/", "webex.com/", "whereby.com/", "facetime.apple.com/" };
+        string any = null;
+        foreach (string t in texts)
+        {
+            if (string.IsNullOrEmpty(t)) continue;
+            foreach (Match m in Regex.Matches(t, @"https?://[^\s<>""')\]]+"))
+            {
+                string u = m.Value.TrimEnd('.', ',', ';');
+                if (known.Any(k => u.Contains(k, StringComparison.OrdinalIgnoreCase))) return u;
+                any ??= u;
+            }
+        }
+        return any;
+    }
+
+    // A place you'd get directions to: a location that isn't just a meeting link.
+    public static string Place(AgendaItem i) =>
+        string.IsNullOrWhiteSpace(i.Where) || Regex.IsMatch(i.Where, @"^\s*https?://") ? null : i.Where;
     public static string Range(AgendaItem i) =>
         i.End > i.Start ? Time(i.Start) + " – " + Time(i.End) : Time(i.Start);
 

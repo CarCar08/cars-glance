@@ -48,7 +48,11 @@ $app = Join-Path $work 'app'
 Run 'dotnet' @('publish', 'src\Glance\Glance.csproj', '-c', $Configuration, '-o', $app, '--nologo', '-v', 'q',
     '-r', 'win-x64', '--self-contained', 'true', '-p:DebugType=none', '-p:GenerateDocumentationFile=false',
     "-p:Version=$numeric", "-p:InformationalVersion=$Version")
-foreach ($f in 'CarsGlance.exe', 'settings.default.json') {
+# The Settings window publishes into the same folder (same runtime files, so nothing is duplicated).
+Run 'dotnet' @('publish', 'src\Glance.Settings\Glance.Settings.csproj', '-c', $Configuration, '-o', $app, '--nologo', '-v', 'q',
+    '-r', 'win-x64', '--self-contained', 'true', '-p:DebugType=none', '-p:GenerateDocumentationFile=false',
+    "-p:Version=$numeric", "-p:InformationalVersion=$Version")
+foreach ($f in 'CarsGlance.exe', 'CarsGlance.Settings.exe', 'settings.default.json') {
     if (-not (Test-Path (Join-Path $app $f))) { throw "Missing $f in the publish output" }
 }
 # The licences travel with the program.
