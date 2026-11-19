@@ -595,6 +595,22 @@ static class Preview
                     nf.FadeFrom = null;
                 }
             }
+            else if (Array.IndexOf(args, "--roll") >= 0 && vm.Values != null)
+            {
+                // the digits ticking over from one second before --at to --at
+                List<ViewModel> before = Views.Build(settings, at.AddSeconds(-1), weather, media, agenda);
+                ViewModel pv = before.FirstOrDefault(v => v.Kind == vm.Kind) ?? vm;
+                foreach (float t in new[] { 0f, 0.15f, 0.3f, 0.45f, 0.6f, 0.8f, 1f })
+                {
+                    FrameState rf = NewFrame(vm, views.Count, index);
+                    for (int i = 0; i < vm.Values.Length; i++)
+                    {
+                        rf.Prev[i] = pv.Values != null && i < pv.Values.Length ? pv.Values[i] : null;
+                        rf.ColT[i] = rf.Prev[i] == rf.Cur[i] ? 1 : t;
+                    }
+                    frames.Add(Framed(art, rf, bgFile, s));
+                }
+            }
             else if (buttons && vm.Kind == ViewKind.NowPlaying)
             {
                 foreach (float t in new[] { 0f, 0.25f, 0.5f, 0.75f, 1f })

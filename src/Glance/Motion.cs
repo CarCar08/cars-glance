@@ -17,7 +17,7 @@ static class Motion
     public const double PressMs = 260;    // button dips when clicked
     public const double MorphMs = 240;    // play <-> pause
     public const double DotMs = 440;      // page indicator glides
-    public const double RollMs = 420;     // digits roll
+    public const double RollMs = 560;     // digits roll (only the digits that changed)
 
     public static float Clamp01(double t) => (float)Math.Clamp(t, 0, 1);
     public static float EaseOut(float t) { float u = 1 - t; return 1 - u * u * u * u; }                 // quick start, soft landing

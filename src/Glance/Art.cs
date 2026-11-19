@@ -135,41 +135,100 @@ sealed class DigitRow : IDisposable
 
     public void DrawAll(Graphics g, string[] values, float alpha)
     {
-        for (int i = 0; i < ColRects.Length; i++) DrawDigits(g, values[i], i, 0, (int)(255 * alpha));
+        for (int i = 0; i < ColRects.Length; i++)
+        {
+            string text = values[i];
+            if (string.IsNullOrEmpty(text)) continue;
+            float[] x = Lefts(i, text);
+            for (int k = 0; k < text.Length; k++) DrawChar(g, text[k], x[k], 0, (int)(255 * alpha));
+        }
     }
 
+    // Like an odometer: only the characters that changed roll (14 → 15 moves the 4, never the 1). Digits keep
+    // their natural spacing; if a change alters the column's width (10 → 11), the digits that stay glide to their
+    // new places instead of jumping. If the length changes (9 → 10) the whole column rolls.
     public void DrawColumn(Graphics g, Rectangle clip, int i, string cur, string prev, float t, float alpha)
     {
         g.SetClip(Rectangle.Intersect(clip, ColRects[i]));
-        if (t >= 1 || prev == null)
+        int a = (int)(255 * alpha);
+        if (string.IsNullOrEmpty(cur)) { g.SetClip(clip); return; }
+        float[] now = Lefts(i, cur);
+        bool rolling = t < 1 && prev != null && prev != cur;
+        if (!rolling)
         {
-            DrawDigits(g, cur, i, 0, (int)(255 * alpha));
+            for (int k = 0; k < cur.Length; k++) DrawChar(g, cur[k], now[k], 0, a);
         }
         else
         {
-            float e = 1 - (1 - t) * (1 - t) * (1 - t); // ease-out cubic
-            DrawDigits(g, prev, i, -shift * e, (int)(255 * alpha * (1 - e) * (1 - e)));
-            DrawDigits(g, cur, i, shift * (1 - e), (int)(255 * alpha * Math.Min(1f, e * 1.4f)));
+            (float move, float outY, float outA, float inY, float inA) = Roll(t);
+            float[] was = Lefts(i, prev);
+            if (prev.Length == cur.Length)
+            {
+                for (int k = 0; k < cur.Length; k++)
+                {
+                    if (cur[k] == prev[k]) { DrawChar(g, cur[k], was[k] + (now[k] - was[k]) * move, 0, a); continue; }
+                    DrawChar(g, prev[k], was[k], outY, (int)(a * outA));
+                    DrawChar(g, cur[k], now[k], inY, (int)(a * inA));
+                }
+            }
+            else
+            {
+                for (int k = 0; k < prev.Length; k++) DrawChar(g, prev[k], was[k], outY, (int)(a * outA));
+                for (int k = 0; k < cur.Length; k++) DrawChar(g, cur[k], now[k], inY, (int)(a * inA));
+            }
         }
         g.SetClip(clip);
     }
 
-    void DrawDigits(Graphics g, string text, int col, float dy, int alpha)
+    // The roll: the old digit drifts up and fades out early, the new one rises in a beat later and settles
+    // softly (ease in-out), so the two never smear into each other.
+    (float Move, float OutY, float OutA, float InY, float InA) Roll(float t)
     {
-        if (alpha <= 0 || string.IsNullOrEmpty(text)) return;
-        if (!cache.TryGetValue(text, out var entry))
+        float move = Motion.EaseInOut(Motion.Clamp01(t));
+        float outA = 1 - Motion.Smooth(Motion.Clamp01(t / 0.55));
+        float inA = Motion.Smooth(Motion.Clamp01((t - 0.18) / 0.6));
+        return (move, -shift * move, outA, shift * (1 - move), inA);
+    }
+
+    // Left edge of each character of `text` in column `col`, with natural (proportional) spacing: centred in
+    // the column, or right-aligned for the clock's hour so its colon never moves.
+    float[] Lefts(int col, string text)
+    {
+        var lefts = new float[text.Length];
+        float total = 0;
+        for (int k = 0; k < text.Length; k++) total += Glyph(text[k]).Adv;
+        float x = col == 0 && firstRight ? colX[0] + colW - total : colX[col] + (colW - total) / 2;
+        for (int k = 0; k < text.Length; k++)
         {
-            float adv = Art.Advance(text, Style.Bold, px, fmt);
-            var path = new GraphicsPath(FillMode.Winding);
-            path.AddString(text, Style.Bold, (int)FontStyle.Regular, px, new PointF(-adv / 2, 0), fmt);
-            entry = (path, adv);
-            cache[text] = entry;
+            lefts[k] = x;
+            x += Glyph(text[k]).Adv;
         }
-        float cx = col == 0 && firstRight ? colX[0] + colW - entry.Adv / 2 : colX[col] + colW / 2;
-        using var p = (GraphicsPath)entry.Path.Clone();
+        return lefts;
+    }
+
+    (GraphicsPath Path, float Adv) Glyph(char c)
+    {
+        string key = c.ToString();
+        if (!cache.TryGetValue(key, out var entry))
+        {
+            float adv = Art.Advance(key, Style.Bold, px, fmt);
+            var path = new GraphicsPath(FillMode.Winding);
+            path.AddString(key, Style.Bold, (int)FontStyle.Regular, px, PointF.Empty, fmt);
+            entry = (path, adv);
+            cache[key] = entry;
+        }
+        return entry;
+    }
+
+    void DrawChar(Graphics g, char c, float slotLeft, float dy, int alpha)
+    {
+        if (alpha <= 0) return;
+        var (path, _) = Glyph(c);
+        float x = slotLeft;
+        using var p = (GraphicsPath)path.Clone();
         using (var m = new Matrix())
         {
-            m.Translate(cx, originY + dy + 3 * s);
+            m.Translate(x, originY + dy + 3 * s);
             p.Transform(m);
         }
         using (var shadow = new SolidBrush(Color.FromArgb(alpha * 70 / 255, 0, 0, 0))) g.FillPath(shadow, p);

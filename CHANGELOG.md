@@ -2,6 +2,16 @@
 
 Each section becomes the release notes on GitHub. Newest first.
 
+## 0.9.1 — Smoother digits (2026-11-18)
+
+**Fixes**
+- The seconds no longer roll both digits every second. Like an odometer, only the digit that changed rolls (14 → 15 moves the 4, never the 1), on the clock, countdowns and Next up.
+- The roll is calmer: about half a second with a soft start and stop; the old digit drifts up and fades before the new one rises in, so they never smear together.
+- When a change makes a number narrower or wider (10 → 11), the digits that stay glide to their new places instead of jumping.
+
+**Under the hood**
+- The release build moved to the current GitHub Actions versions.
+
 ## 0.9.0 — Glance goes public (2026-11-18)
 
 The desktop widget that started as a GTA VI countdown is now **C.A.R.S. Glance**: its own app, installer and updates.
