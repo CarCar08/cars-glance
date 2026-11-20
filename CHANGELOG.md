@@ -2,6 +2,12 @@
 
 Each section becomes the release notes on GitHub. Newest first.
 
+## 1.0.1 — Quieter hover (2026-11-19)
+
+**Fixes**
+- Hovering over a countdown no longer puts a big grey box behind the digits. Large areas (a countdown, the album cover) now only change the pointer to a hand.
+- The soft highlight behind clickable lines (Home's lines, agenda rows, the weather) is much fainter, and stays faint on dark wallpapers: it came out several times brighter than intended over black.
+
 ## 1.0.0 — Interactive (2026-11-18)
 
 Glance is no longer just something to look at: click things on the panel to use them, and change everything in a proper Settings window.

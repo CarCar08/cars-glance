@@ -24,9 +24,10 @@ readonly record struct Hit(HitKind Kind, Rectangle Rect, int Index = -1)
 {
     public static readonly Hit Nothing = new(HitKind.None, Rectangle.Empty);
     public bool Any => Kind != HitKind.None;
-    // Regions that get the soft hover plate (buttons draw their own hover).
+    // Lines of text that get the soft hover plate. Buttons draw their own hover; big areas (a countdown's digits,
+    // the album cover) only change the cursor: a plate that size looked like a grey slab on a dark wallpaper (1.0.1).
     public bool Plate => Kind is HitKind.Weather or HitKind.Date or HitKind.TaskOpen or HitKind.EventOpen or HitKind.More
-        or HitKind.NextDirections or HitKind.Countdown or HitKind.Cover or HitKind.HomeLine;
+        or HitKind.NextDirections or HitKind.HomeLine;
 }
 
 static class Open

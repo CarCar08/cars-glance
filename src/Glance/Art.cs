@@ -1057,9 +1057,14 @@ sealed class PanelArt : IDisposable
         Hit h = f.HoverHit;
         if (h.Plate && f.HoverT > 0.01f)
         {
-            using GraphicsPath p = Art.Rounded(h.Rect, 10 * s);
-            using var plate = new SolidBrush(Color.FromArgb((int)(20 * f.HoverT), 255, 255, 255));
+            // Plain (not gamma-correct) blending: with the panel's high-quality compositing a faint white over a
+            // black wallpaper came out about four times brighter than its alpha.
+            using GraphicsPath p = Art.Rounded(h.Rect, 8 * s);
+            using var plate = new SolidBrush(Color.FromArgb((int)(16 * Motion.Smooth(f.HoverT)), 255, 255, 255));
+            CompositingQuality q = g.CompositingQuality;
+            g.CompositingQuality = CompositingQuality.AssumeLinear;
             g.FillPath(plate, p);
+            g.CompositingQuality = q;
         }
         if (h.Kind == HitKind.TaskDone && f.View?.Rows != null && h.Index >= 0 && h.Index < f.View.Rows.Count)
         {
