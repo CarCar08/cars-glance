@@ -574,8 +574,8 @@ sealed class Pages
 
     static readonly (string Name, string Hex)[] Accents =
     {
-        ("Red", "#FF281C"), ("Crimson", "#E0103C"), ("Orange", "#FF7A1A"), ("Amber", "#FFB300"), ("Green", "#2ECC71"),
-        ("Teal", "#1ABC9C"), ("Blue", "#3D8BFF"), ("Purple", "#9B59FF"), ("Pink", "#FF4FA3"), ("White", "#F2F2F2"),
+        ("Blue (default)", "#3D8BFF"), ("Teal", "#1ABC9C"), ("Green", "#2ECC71"), ("Amber", "#FFB300"), ("Orange", "#FF7A1A"),
+        ("Red", "#FF281C"), ("Crimson", "#E0103C"), ("Pink", "#FF4FA3"), ("Purple", "#9B59FF"), ("White", "#F2F2F2"),
     };
 
     UIElement Appearance()
@@ -606,7 +606,7 @@ sealed class Pages
         };
         var accent = new StackPanel();
         accent.Children.Add(new TextBlock { Text = "Accent colour", FontSize = 15 });
-        accent.Children.Add(Note("Titles, the NOW and overdue marks, the page dot and the buttons. Red matches the C.A.R.S. look.", 13, new Thickness(0, 2, 0, 12)));
+        accent.Children.Add(Note("Titles, the NOW and overdue marks, the page dot and the buttons. Blue is the C.A.R.S. look.", 13, new Thickness(0, 2, 0, 12)));
         accent.Children.Add(swatches);
         accent.Children.Add(hex);
         p.Children.Add(Panel(accent));

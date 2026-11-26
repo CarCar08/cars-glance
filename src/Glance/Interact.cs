@@ -46,7 +46,7 @@ static class Open
 
 sealed class GlanceMenuRenderer : ToolStripProfessionalRenderer
 {
-    public static readonly Color Back = Color.FromArgb(24, 14, 16), Hover = Color.FromArgb(70, 255, 40, 28),
+    public static readonly Color Back = Color.FromArgb(14, 18, 24), Hover = Color.FromArgb(70, 61, 139, 255),
         Text = Color.FromArgb(240, 240, 240), Dim = Color.FromArgb(150, 150, 150), Line = Color.FromArgb(55, 255, 255, 255);
 
     public GlanceMenuRenderer() : base(new Colors()) { RoundedEdges = false; }
@@ -67,7 +67,7 @@ sealed class GlanceMenuRenderer : ToolStripProfessionalRenderer
     {
         Rectangle r = e.ImageRectangle;
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        using var pen = new Pen(Style.Red, 2.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+        using var pen = new Pen(Style.Accent, 2.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
         e.Graphics.DrawLines(pen, new[] { new PointF(r.Left + r.Width * 0.18f, r.Top + r.Height * 0.52f), new PointF(r.Left + r.Width * 0.42f, r.Top + r.Height * 0.76f), new PointF(r.Right - r.Width * 0.14f, r.Top + r.Height * 0.26f) });
     }
 
@@ -116,7 +116,7 @@ sealed class QuickAddForm : Form
         box = new TextBox
         {
             Location = new Point(18, 18), Width = 524, BorderStyle = BorderStyle.FixedSingle,
-            BackColor = Color.FromArgb(40, 28, 31), ForeColor = GlanceMenuRenderer.Text,
+            BackColor = Color.FromArgb(28, 33, 40), ForeColor = GlanceMenuRenderer.Text,
             PlaceholderText = "Call the dentist tomorrow at 3pm #Errands p1",
         };
         status = new Label
@@ -147,7 +147,7 @@ sealed class QuickAddForm : Form
         if (error == null) { Close(); return; }
         box.Enabled = true;
         box.Focus();
-        status.ForeColor = Style.Red;
+        status.ForeColor = Color.FromArgb(255, 120, 110); // errors stay a soft red
         status.Text = error;
     }
 }

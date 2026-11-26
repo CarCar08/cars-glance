@@ -2,6 +2,13 @@
 
 Each section becomes the release notes on GitHub. Newest first.
 
+## 1.0.2 — Glance goes blue (2026-11-26)
+
+**New look**
+- Blue is Glance's colour now: the panel's titles, marks and page dot, the right-click menu, Quick add, Connect Todoist, the Settings window, Setup and the app icon. The glass has a faint cool tint instead of a warm one.
+- If you've saved anything in the Settings window, your accent (red, back then) is kept: pick Blue in Settings › Appearance to switch. Otherwise Glance turns blue by itself. Red is still one click away there too.
+- Error messages stay a soft red, and Todoist's own priority colours (red for p1) are unchanged.
+
 ## 1.0.1 — Quieter hover (2026-11-19)
 
 **Fixes**

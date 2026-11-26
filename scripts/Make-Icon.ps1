@@ -1,6 +1,6 @@
 # Generates src\Glance\Assets\glance.ico (16/24/32/48/64/256 px, PNG-compressed entries) and glance.png (256 px).
-# The mark: a deep-red square (the wallpaper Glance was designed on), a frosted-glass panel with the time in
-# white and a red colon, and the red page pill under it.
+# The mark: a deep-blue square, a frosted-glass panel with the time in white and a blue colon, and the blue
+# page pill under it.
 # Run with Windows PowerShell 5.1 (System.Drawing):  powershell -File scripts\Make-Icon.ps1
 Add-Type -AssemblyName System.Drawing
 $out = Join-Path $PSScriptRoot '..\src\Glance\Assets'
@@ -20,9 +20,9 @@ function New-IconBitmap([int]$size) {
   $g.SmoothingMode = 'AntiAlias'; $g.PixelOffsetMode = 'HighQuality'; $g.Clear([System.Drawing.Color]::Transparent)
   $s = [float]$size
 
-  # background: deep red to near-black
+  # background: deep blue to near-black
   $bg = New-RoundRect 0 0 ($s - 1) ($s - 1) ($s * 0.22)
-  $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush (New-Object System.Drawing.PointF 0, 0), (New-Object System.Drawing.PointF $s, $s), ([System.Drawing.Color]::FromArgb(255, 176, 18, 24)), ([System.Drawing.Color]::FromArgb(255, 28, 3, 6))
+  $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush (New-Object System.Drawing.PointF 0, 0), (New-Object System.Drawing.PointF $s, $s), ([System.Drawing.Color]::FromArgb(255, 18, 81, 176)), ([System.Drawing.Color]::FromArgb(255, 3, 13, 28))
   $g.FillPath($brush, $bg)
 
   # the glass panel
@@ -31,20 +31,20 @@ function New-IconBitmap([int]$size) {
   $g.FillPath((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(70, 255, 255, 255))), $panel)
   if ($size -ge 32) { $g.DrawPath((New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(150, 255, 255, 255)), ([float][Math]::Max(1, $s / 64))), $panel) }
 
-  # the time: two white blocks with a red colon between them
+  # the time: two white blocks with a blue colon between them
   $bh = $ph * 0.42; $by = $py + ($ph - $bh) / 2; $bw = $pw * 0.30; $gap = $pw * 0.12
   $lx = $px + ($pw - (2 * $bw + $gap)) / 2
   $white = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(245, 255, 255, 255))
   $g.FillPath($white, (New-RoundRect $lx $by $bw $bh ($bh * 0.22)))
   $g.FillPath($white, (New-RoundRect ($lx + $bw + $gap) $by $bw $bh ($bh * 0.22)))
-  $red = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 255, 40, 28))
+  $accent = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 61, 139, 255))
   $dot = [Math]::Max(1.5, $gap * 0.45); $cx = $lx + $bw + $gap / 2
-  $g.FillEllipse($red, $cx - $dot / 2, $by + $bh * 0.22 - $dot / 2, $dot, $dot)
-  $g.FillEllipse($red, $cx - $dot / 2, $by + $bh * 0.78 - $dot / 2, $dot, $dot)
+  $g.FillEllipse($accent, $cx - $dot / 2, $by + $bh * 0.22 - $dot / 2, $dot, $dot)
+  $g.FillEllipse($accent, $cx - $dot / 2, $by + $bh * 0.78 - $dot / 2, $dot, $dot)
 
   # the page pill and two faint dots under the panel
   $pillH = [Math]::Max(2, $s * 0.055); $pillW = $s * 0.16; $pyy = $py + $ph + $s * 0.09
-  $g.FillPath($red, (New-RoundRect ($s / 2 - $pillW / 2) $pyy $pillW $pillH ($pillH / 2)))
+  $g.FillPath($accent, (New-RoundRect ($s / 2 - $pillW / 2) $pyy $pillW $pillH ($pillH / 2)))
   if ($size -ge 32) {
     $faint = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(150, 255, 255, 255))
     $g.FillEllipse($faint, $s / 2 - $pillW / 2 - $s * 0.09, $pyy, $pillH, $pillH)

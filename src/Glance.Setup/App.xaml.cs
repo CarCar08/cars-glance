@@ -100,14 +100,14 @@ namespace Glance.SetupApp
             return result.Ok ? 0 : 1;
         }
 
-        /// <summary>Dark glass with Glance's red, matching the widget. The accent is applied before and after the
+        /// <summary>Dark glass with Glance's blue, matching the widget. The accent is applied before and after the
         /// theme: reloading a theme copies whichever accent is current at that moment.</summary>
         private static void ApplyTheme()
         {
-            var red = (Color)ColorConverter.ConvertFromString("#FF281C");
-            ApplicationAccentColorManager.Apply(red, ApplicationTheme.Dark);
+            var blue = (Color)ColorConverter.ConvertFromString("#3D8BFF");
+            ApplicationAccentColorManager.Apply(blue, ApplicationTheme.Dark);
             ApplicationThemeManager.Apply(ApplicationTheme.Dark, WindowBackdropType.Mica, updateAccent: false);
-            ApplicationAccentColorManager.Apply(red, ApplicationTheme.Dark);
+            ApplicationAccentColorManager.Apply(blue, ApplicationTheme.Dark);
         }
 
         protected override void OnExit(ExitEventArgs e)

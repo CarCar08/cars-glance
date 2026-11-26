@@ -97,7 +97,7 @@ sealed class NowPlayingSetting
 // How the panel looks and where it sits (1.0).
 sealed class AppearanceSetting
 {
-    public string Accent { get; set; } = "#FF281C";     // titles, the Now and overdue marks, pills
+    public string Accent { get; set; } = "#3D8BFF";     // titles, the Now and overdue marks, pills
     public int Glass { get; set; } = 40;                 // how dark the glass is, 0 (clear) to 100
     public int Size { get; set; } = 100;                 // percent of the normal size, 70 to 160 (text grows with it)
     public string Position { get; set; } = "center";     // center, top, bottom, top-left, top-right, bottom-left, bottom-right
@@ -113,7 +113,7 @@ sealed class AppearanceSetting
             string h = (Accent ?? "").Trim().TrimStart('#');
             return h.Length == 6 && int.TryParse(h, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int v)
                 ? Color.FromArgb(255, (v >> 16) & 255, (v >> 8) & 255, v & 255)
-                : Color.FromArgb(255, 255, 40, 28);
+                : Color.FromArgb(255, 61, 139, 255);
         }
     }
 }
@@ -501,7 +501,7 @@ static class Views
         {
             bool on = i.HasTime && i.Start <= now && i.End > now;
             string time = i.AllDay ? "ALL DAY" : on ? "NOW" : Agenda.Time(i.Start);
-            return new AgendaRow(time, on, RowMarker.Bar, i.Color ?? Color.FromArgb(255, 255, 40, 28), i.Title, i.Where, ItemId: i.Id, Source: i.Source);
+            return new AgendaRow(time, on, RowMarker.Bar, i.Color ?? Color.FromArgb(255, 61, 139, 255), i.Title, i.Where, ItemId: i.Id, Source: i.Source);
         }
         bool overdue = i.Start.Date < today, late = overdue || (i.HasTime && i.Start < now);
         string when = overdue ? i.Start.ToString("MMM d", En).ToUpperInvariant() : i.HasTime ? Agenda.Time(i.Start) : "";

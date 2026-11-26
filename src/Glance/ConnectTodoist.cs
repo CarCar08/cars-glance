@@ -9,8 +9,8 @@ namespace Glance;
 sealed class ConnectTodoistForm : Form
 {
     const string DeveloperSettings = "https://app.todoist.com/app/settings/integrations/developer";
-    static readonly Color Back = Color.FromArgb(22, 14, 16), Field = Color.FromArgb(38, 26, 29), Text1 = Color.FromArgb(240, 240, 240),
-                          Text2 = Color.FromArgb(185, 180, 182), Red = Color.FromArgb(225, 38, 28);
+    static readonly Color Back = Color.FromArgb(14, 17, 22), Field = Color.FromArgb(26, 31, 38), Text1 = Color.FromArgb(240, 240, 240),
+                          Text2 = Color.FromArgb(180, 182, 185), Accent = Color.FromArgb(61, 139, 255), Error = Color.FromArgb(255, 120, 110);
     readonly TextBox token;
     readonly Button connect, disconnect, cancel;
     readonly Label status;
@@ -38,7 +38,7 @@ sealed class ConnectTodoistForm : Form
         var link = new LinkLabel
         {
             Text = "Open Todoist's Developer settings", AutoSize = true, Location = new Point(24, 104),
-            LinkColor = Red, ActiveLinkColor = Text1, VisitedLinkColor = Red,
+            LinkColor = Accent, ActiveLinkColor = Text1, VisitedLinkColor = Accent,
         };
         link.LinkClicked += (s, e) => { try { Process.Start(new ProcessStartInfo(DeveloperSettings) { UseShellExecute = true }); } catch { } };
         token = new TextBox
@@ -47,7 +47,7 @@ sealed class ConnectTodoistForm : Form
             Location = new Point(24, 138), Width = 472, PlaceholderText = "API token",
         };
         status = new Label { ForeColor = Text2, AutoSize = true, MaximumSize = new Size(472, 0), Location = new Point(24, 176) };
-        connect = MakeButton("Connect", Red, new Point(396, 216));
+        connect = MakeButton("Connect", Accent, new Point(396, 216));
         cancel = MakeButton("Cancel", Field, new Point(288, 216));
         disconnect = MakeButton("Disconnect", Field, new Point(24, 216));
         disconnect.Visible = Credentials.Read() != null;
@@ -113,7 +113,7 @@ sealed class ConnectTodoistForm : Form
 
     void Say(string text, bool error)
     {
-        status.ForeColor = error ? Red : Text2;
+        status.ForeColor = error ? Error : Text2;
         status.Text = text;
     }
 

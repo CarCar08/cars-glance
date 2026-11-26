@@ -407,7 +407,7 @@ static class SelfTest
         s.ShowClockView = false;
         Settings odd = Settings.Parse("{ \"appearance\": { \"size\": 500, \"glass\": -3, \"position\": \"middle\", \"accent\": \"nope\" }, \"viewOrder\": [ \"agenda\", \"bogus\" ], \"firstView\": \"x\" }");
         Check("odd settings are made safe (size, glass, position, accent, order, first view)",
-            odd.Appearance.Size == 160 && odd.Appearance.Glass == 0 && odd.Appearance.Position == "center" && odd.Appearance.AccentColor.R == 255 && odd.Appearance.AccentColor.G == 40 &&
+            odd.Appearance.Size == 160 && odd.Appearance.Glass == 0 && odd.Appearance.Position == "center" && odd.Appearance.AccentColor.R == 61 && odd.Appearance.AccentColor.B == 255 &&
             odd.ViewOrder.SequenceEqual(new[] { "agenda", "nextup", "nowplaying", "countdowns", "clock" }) && odd.FirstView == "home");
         Check("countdown distance reads simply", Views.Until(new DateTime(2026, 11, 20, 12, 0, 0), new DateTime(2026, 11, 18, 12, 0, 0)) == "2 days" &&
             Views.Until(new DateTime(2026, 11, 18, 17, 20, 0), new DateTime(2026, 11, 18, 12, 0, 0)) == "5 h 20 min");
@@ -764,7 +764,7 @@ static class Preview
         g.InterpolationMode = InterpolationMode.HighQualityBicubic;
         var all = new Rectangle(0, 0, canvas.Width, canvas.Height);
         if (bgFile != null) using (Image bg = Image.FromFile(bgFile)) g.DrawImage(bg, all);
-        else using (var bgb = new LinearGradientBrush(all, Color.FromArgb(150, 12, 20), Color.FromArgb(20, 2, 4), 35f)) g.FillRectangle(bgb, all);
+        else using (var bgb = new LinearGradientBrush(all, Color.FromArgb(12, 67, 150), Color.FromArgb(2, 9, 20), 35f)) g.FillRectangle(bgb, all);
 
         var pr = new Rectangle(pad, pad, art.W, art.H);
         using (Bitmap under = canvas.Clone(pr, canvas.PixelFormat))

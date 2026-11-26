@@ -7,19 +7,19 @@
 <meta name="description" content="Your day at a glance, right on the desktop: a frosted-glass Windows widget for the time, weather, music, calendar, tasks and countdowns.">
 <link rel="icon" href="images/icon.png">
 <style>
-  :root { --red: #ff281c; --ink: #fff; --muted: rgba(255,255,255,.78); --faint: rgba(255,255,255,.55); --glass: rgba(255,255,255,.07); --edge: rgba(255,255,255,.16); }
+  :root { --accent: #3d8bff; --ink: #fff; --muted: rgba(255,255,255,.78); --faint: rgba(255,255,255,.55); --glass: rgba(255,255,255,.07); --edge: rgba(255,255,255,.16); }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: "Bahnschrift", "Segoe UI", system-ui, sans-serif; color: var(--ink);
-         background: radial-gradient(1200px 700px at 15% -10%, #8f0d14 0%, transparent 60%), linear-gradient(135deg, #3a0508, #0d0103 70%); min-height: 100vh; }
+         background: radial-gradient(1200px 700px at 15% -10%, #0d418f 0%, transparent 60%), linear-gradient(135deg, #051a3a, #01060d 70%); min-height: 100vh; }
   main { max-width: 1040px; margin: 0 auto; padding: 56px 16px 80px; }
   header { display: flex; align-items: center; gap: 18px; }
   header img { width: 64px; height: 64px; }
   h1 { font-size: clamp(32px, 6vw, 52px); margin: 0; letter-spacing: .5px; }
-  .tag { color: var(--red); letter-spacing: 6px; font-weight: 600; font-size: 14px; margin: 0 0 6px; }
+  .tag { color: var(--accent); letter-spacing: 6px; font-weight: 600; font-size: 14px; margin: 0 0 6px; }
   p.lead { font-size: clamp(18px, 2.4vw, 22px); color: var(--muted); max-width: 720px; line-height: 1.5; }
   .cta { display: flex; flex-wrap: wrap; gap: 12px; margin: 28px 0 40px; }
   .btn { display: inline-block; padding: 14px 22px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 17px; }
-  .primary { background: var(--red); color: #fff; }
+  .primary { background: var(--accent); color: #fff; }
   .ghost { background: var(--glass); border: 1px solid var(--edge); color: var(--ink); }
   .shot { width: 100%; border-radius: 12px; display: block; margin: 0 0 18px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; margin-top: 18px; }

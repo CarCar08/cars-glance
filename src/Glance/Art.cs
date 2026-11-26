@@ -9,7 +9,7 @@ static class Style
 {
     // The accent (Settings > Appearance; red by default), and how strong the secondary text and the glass are.
     // Set before the panels are built (Apply); a change rebuilds them.
-    public static Color Red = Color.FromArgb(255, 255, 40, 28);
+    public static Color Accent = Color.FromArgb(255, 61, 139, 255);
     public static readonly Color Ink = Color.FromArgb(255, 255, 255, 255);
     public static Color Muted = Color.FromArgb(215, 255, 255, 255);
     public static Color Faint = Color.FromArgb(150, 255, 255, 255);
@@ -17,7 +17,7 @@ static class Style
 
     public static void Apply(AppearanceSetting look, bool highContrast)
     {
-        Red = look.AccentColor;
+        Accent = look.AccentColor;
         GlassAlpha = highContrast ? 235 : (int)Math.Round(look.Glass * 2.5);
         Muted = Color.FromArgb(highContrast ? 255 : 215, 255, 255, 255);
         Faint = Color.FromArgb(highContrast ? 228 : 150, 255, 255, 255);
@@ -134,7 +134,7 @@ sealed class DigitRow : IDisposable
 
     public void DrawColons(Graphics g)
     {
-        using var b = new SolidBrush(Style.Red);
+        using var b = new SolidBrush(Style.Accent);
         foreach (float cx in sepCx)
         {
             using var p = (GraphicsPath)colon.Clone();
@@ -409,7 +409,7 @@ sealed class PanelArt : IDisposable
         float s = S;
         DigitRow row = HomeRow(vm.Suffix != null);
         float blockL = row.ColRects[0].Left + 4 * s, blockR = vm.Suffix != null ? row.RowRight + 12 * s + Art.Advance(vm.Suffix, Style.Text, 30 * s, fmt) : row.RowRight;
-        Art.Text(g, vm.Title, Style.Bold, 22 * s, 6 * s, Style.Red, (blockL + blockR) / 2, HomeDateTop * s, fmt, true);
+        Art.Text(g, vm.Title, Style.Bold, 22 * s, 6 * s, Style.Accent, (blockL + blockR) / 2, HomeDateTop * s, fmt, true);
         row.DrawColons(g);
         if (vm.Suffix != null)
             Art.TextLeft(g, vm.Suffix, Style.Text, 30 * s, 2.5f * s, Style.Muted, row.RowRight + 12 * s, row.DigitTop + 2 * s, fmt);
@@ -427,7 +427,7 @@ sealed class PanelArt : IDisposable
         {
             HomeLine line = vm.Lines[k];
             float cy = HomeLineY(k, n);
-            Art.TextLeft(g, line.Label, Style.Bold, 14 * s, 2.5f * s, line.Alert ? Style.Red : Style.Faint, HomeLabelX * s, cy - capLabel / 2, fmt);
+            Art.TextLeft(g, line.Label, Style.Bold, 14 * s, 2.5f * s, line.Alert ? Style.Accent : Style.Faint, HomeLabelX * s, cy - capLabel / 2, fmt);
             FontFamily tf = Style.For(line.Text, false);
             Art.TextLeft(g, Art.Fit(g, line.Text, tf, 22 * s, 0.4f * s, textMax, fmt), tf, 22 * s, 0.4f * s, Style.Ink, HomeTextX * s, cy - capText / 2, fmt);
         }
@@ -451,7 +451,7 @@ sealed class PanelArt : IDisposable
     void DrawNextUp(Graphics g, ViewModel vm)
     {
         float s = S, cx = W / 2f;
-        Art.Text(g, vm.Title, Style.Bold, 26 * s, 8.5f * s, Style.Red, cx, 40 * s, fmt, true);
+        Art.Text(g, vm.Title, Style.Bold, 26 * s, 8.5f * s, Style.Accent, cx, 40 * s, fmt, true);
         FontFamily nameFont = Style.For(vm.Detail, true);
         Art.Text(g, Art.Fit(g, vm.Detail, nameFont, 44 * s, 0.5f * s, W - 180 * s, fmt), nameFont, 44 * s, 0.5f * s, Style.Ink, cx, 80 * s, fmt, true);
         DigitRow row = RowFor(vm);
@@ -516,7 +516,7 @@ sealed class PanelArt : IDisposable
     void DrawPill(Graphics g, Rectangle r, string label, bool primary)
     {
         using GraphicsPath p = Art.Rounded(r, r.Height / 2f);
-        using (var fill = new SolidBrush(primary ? Color.FromArgb(225, Style.Red) : Color.FromArgb(34, 255, 255, 255))) g.FillPath(fill, p);
+        using (var fill = new SolidBrush(primary ? Color.FromArgb(225, Style.Accent) : Color.FromArgb(34, 255, 255, 255))) g.FillPath(fill, p);
         if (!primary) using (var edge = new Pen(Color.FromArgb(70, 255, 255, 255), Math.Max(1f, S))) g.DrawPath(edge, p);
         Art.Text(g, label, Style.Bold, 17 * S, 2.5f * S, Style.Ink, r.X + r.Width / 2f, r.Y + (r.Height - Cap(Style.Bold, 17 * S)) / 2, fmt, false);
     }
@@ -524,7 +524,7 @@ sealed class PanelArt : IDisposable
     void DrawAgenda(Graphics g, ViewModel vm)
     {
         float s = S, cx = W / 2f, left = AgLeft, right = AgRight;
-        Art.TextLeft(g, vm.Title, Style.Bold, 24 * s, 7 * s, Style.Red, left, 44 * s, fmt, true);
+        Art.TextLeft(g, vm.Title, Style.Bold, 24 * s, 7 * s, Style.Accent, left, 44 * s, fmt, true);
         float noteRight = right;
         if (vm.CanAdd)
         {
@@ -573,7 +573,7 @@ sealed class PanelArt : IDisposable
                 continue;
             }
             if (!string.IsNullOrEmpty(row.Time))
-                Art.TextRight(g, row.Time, Style.Text, 22 * s, 1.5f * s, row.Alert ? Style.Red : Style.Muted, timeRight, cy - capTime / 2, fmt);
+                Art.TextRight(g, row.Time, Style.Text, 22 * s, 1.5f * s, row.Alert ? Style.Accent : Style.Muted, timeRight, cy - capTime / 2, fmt);
             if (row.Marker == RowMarker.Bar)
             {
                 using GraphicsPath bar = Art.Rounded(new RectangleF(markX - 2.5f * s, cy - 13 * s, 5 * s, 26 * s), 2.5f * s);
@@ -587,7 +587,7 @@ sealed class PanelArt : IDisposable
                 {
                     // ticked: a filled ring with a check
                     using (var fill = new SolidBrush(row.MarkerColor)) g.FillEllipse(fill, markX - r - s, cy - r - s, 2 * r + 2 * s, 2 * r + 2 * s);
-                    using var check = new Pen(Color.FromArgb(240, 20, 10, 12), 2.2f * s) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+                    using var check = new Pen(Color.FromArgb(240, 10, 14, 20), 2.2f * s) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
                     g.DrawLines(check, new[] { new PointF(markX - 4.5f * s, cy), new PointF(markX - 1 * s, cy + 3.5f * s), new PointF(markX + 5 * s, cy - 4 * s) });
                 }
                 else
@@ -635,7 +635,7 @@ sealed class PanelArt : IDisposable
         float x = r.X + 28 * s, width = r.Width - 56 * s;
         FontFamily tf = Style.For(c.Title, true);
         Art.TextLeft(g, Art.Fit(g, c.Title, tf, 32 * s, 0.4f * s, width, fmt), tf, 32 * s, 0.4f * s, Style.Ink, x, 104 * s, fmt, true);
-        Art.TextLeft(g, c.When.ToUpperInvariant(), Style.Text, 20 * s, 3 * s, Style.Red, x, 152 * s, fmt);
+        Art.TextLeft(g, c.When.ToUpperInvariant(), Style.Text, 20 * s, 3 * s, Style.Accent, x, 152 * s, fmt);
         if (!string.IsNullOrWhiteSpace(c.Where))
         {
             FontFamily wf = Style.For(c.Where, false);
@@ -689,7 +689,7 @@ sealed class PanelArt : IDisposable
         else if (vm.Kind == ViewKind.Clock)
         {
             DigitRow row = RowFor(vm);
-            Art.Text(g, vm.Title, Style.Bold, 26 * s, 8.5f * s, Style.Red, cx, 52 * s, fmt, true);
+            Art.Text(g, vm.Title, Style.Bold, 26 * s, 8.5f * s, Style.Accent, cx, 52 * s, fmt, true);
             row.DrawColons(g);
             if (vm.Suffix != null)
                 Art.TextLeft(g, vm.Suffix, Style.Text, 36 * s, 3 * s, Style.Muted, row.RowRight + 16 * s, row.DigitTop + 2 * s, fmt);
@@ -698,7 +698,7 @@ sealed class PanelArt : IDisposable
         }
         else
         {
-            Art.Text(g, vm.Title, Style.Bold, 26 * s, 8.5f * s, Style.Red, cx, 40 * s, fmt, true);
+            Art.Text(g, vm.Title, Style.Bold, 26 * s, 8.5f * s, Style.Accent, cx, 40 * s, fmt, true);
             if (vm.Big != null)
             {
                 Art.Text(g, vm.Big, Style.Bold, 136 * s, 9 * s, Style.Ink, cx, 102 * s, fmt, false);
@@ -780,7 +780,7 @@ sealed class PanelArt : IDisposable
         }
         DrawCover(g, m);
 
-        Art.TextLeft(g, vm.Title, Style.Bold, 24 * s, 7 * s, Style.Red, colL, 72 * s, fmt, true);
+        Art.TextLeft(g, vm.Title, Style.Bold, 24 * s, 7 * s, Style.Accent, colL, 72 * s, fmt, true);
         FontFamily songFont = Style.For(m.Title, true);
         string song = Art.Fit(g, m.Title, songFont, 50 * s, 0.5f * s, width, fmt);
         Art.TextLeft(g, song, songFont, 50 * s, 0.5f * s, Style.Ink, colL, 106 * s, fmt, true);
@@ -853,7 +853,7 @@ sealed class PanelArt : IDisposable
             {
                 var fr = new RectangleF(bar.X, bar.Y, Math.Max(bar.Height, fill), bar.Height);
                 using GraphicsPath fp = Art.Rounded(fr, bar.Height / 2);
-                using var fb = new SolidBrush(Color.FromArgb(a255, Style.Red));
+                using var fb = new SolidBrush(Color.FromArgb(a255, Style.Accent));
                 g.FillPath(fb, fp);
             }
             Color times = Color.FromArgb((int)(Style.Faint.A * alpha), Style.Faint);
@@ -924,7 +924,7 @@ sealed class PanelArt : IDisposable
             g.DrawPath(edge, p);
         }
         float dot = 7 * s;
-        using (var red = new SolidBrush(Style.Red)) g.FillEllipse(red, pill.X + 12 * s, pill.Y + (h - dot) / 2, dot, dot);
+        using (var dotBrush = new SolidBrush(Style.Accent)) g.FillEllipse(dotBrush, pill.X + 12 * s, pill.Y + (h - dot) / 2, dot, dot);
         Art.TextLeft(g, text, Style.Text, 15 * s, 2.5f * s, Style.Muted, pill.X + 26 * s, pill.Y + (h - Cap(Style.Text, 15 * s)) / 2, fmt);
     }
 
@@ -1138,7 +1138,7 @@ static class Art
         var b = new Bitmap(w, h, PixelFormat.Format32bppPArgb);
         using Graphics g = Canvas(b);
         g.Clear(Color.Transparent);
-        using (var tint = new SolidBrush(Color.FromArgb(Style.GlassAlpha, 8, 0, 2))) g.FillRectangle(tint, 0, 0, w, h);
+        using (var tint = new SolidBrush(Color.FromArgb(Style.GlassAlpha, 0, 3, 8))) g.FillRectangle(tint, 0, 0, w, h);
         DrawEdge(g, w, h, radius, edgeTop, edgeBottom);
         return b;
     }
@@ -1179,7 +1179,7 @@ static class Art
         using var b = new LinearGradientBrush(new RectangleF(r.X - 1, r.Y, r.Width + 2, r.Height), Color.Transparent, Color.Transparent, 0f);
         b.InterpolationColors = new ColorBlend
         {
-            Colors = new[] { Color.FromArgb(0, Style.Red), Color.FromArgb(170, Style.Red), Color.FromArgb(0, Style.Red) },
+            Colors = new[] { Color.FromArgb(0, Style.Accent), Color.FromArgb(170, Style.Accent), Color.FromArgb(0, Style.Accent) },
             Positions = new[] { 0f, 0.5f, 1f },
         };
         g.FillRectangle(b, r);
